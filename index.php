@@ -1,9 +1,9 @@
 <?php
 /**
- * Customer Menu Page
+ * Customer Menu Browsing Page
  * 
- * Displays all available products grouped by category.
- * Customers can browse the menu and add items to their cart.
+ * Displays all available products grouped by category with category filter tabs,
+ * search bar, and add-to-cart functionality. Cart count shown in navbar.
  */
 
 require_once __DIR__ . '/includes/session.php';
@@ -18,6 +18,12 @@ if (!isset($_SESSION['cart'])) {
     $_SESSION['cart'] = [];
 }
 
+// Calculate cart item count
+$cartCount = 0;
+foreach (($_SESSION['cart'] ?? []) as $qty) {
+    $cartCount += (int) $qty;
+}
+
 // Handle "Add to Cart" via POST
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_id'])) {
     $productId = (int) $_POST['product_id'];
@@ -29,11 +35,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['product_id'])) {
         $_SESSION['cart'][$productId] = $quantity;
     }
 
-    header('Location: /smart-transaction/index.php?added=1');
+    header('Location: /smart-transaction/index.php?added=' . $productId);
     exit;
 }
 
-$addedToCart = isset($_GET['added']);
+$addedProductId = isset($_GET['added']) ? (int) $_GET['added'] : 0;
 
 // Fetch categories and products
 try {
@@ -59,8 +65,10 @@ try {
 include __DIR__ . '/includes/header.php';
 ?>
 
-<?php if ($addedToCart): ?>
-    <div class="alert alert-success">Item added to cart! <a href="/smart-transaction/cart.php">View Cart</a></div>
+<?php if ($addedProductId > 0): ?>
+    <div class="alert alert-success">
+        Item added to cart! <a href="/smart-transaction/cart.php" class="btn btn-sm btn-primary ml-1">View Cart</a>
+    </div>
 <?php endif; ?>
 
 <?php if (isset($error)): ?>
@@ -72,6 +80,21 @@ include __DIR__ . '/includes/header.php';
     <p>Browse our selection of freshly prepared food and beverages</p>
 </div>
 
+<!-- Search Bar -->
+<div class="mb-3">
+    <input type="text" id="menuSearch" class="form-input" placeholder="Search menu items..." style="max-width: 400px;">
+</div>
+
+<!-- Category Filter Tabs -->
+<div class="category-tabs mb-3" id="categoryTabs">
+    <button class="category-tab active" data-category="all">All</button>
+    <?php foreach ($categories as $cat): ?>
+        <button class="category-tab" data-category="<?php echo (int) $cat['id']; ?>">
+            <?php echo htmlspecialchars($cat['name']); ?>
+        </button>
+    <?php endforeach; ?>
+</div>
+
 <?php if (empty($categories)): ?>
     <div class="alert alert-info">No menu items available at the moment. Please check back later.</div>
 <?php else: ?>
@@ -79,7 +102,7 @@ include __DIR__ . '/includes/header.php';
         <?php $products = $productsByCategory[$category['id']] ?? []; ?>
         <?php if (empty($products)) continue; ?>
 
-        <section class="mb-4">
+        <section class="mb-4 category-section" data-category="<?php echo (int) $category['id']; ?>">
             <h2 class="mb-2" style="color: var(--primary); font-size: 1.3rem;">
                 <?php echo htmlspecialchars($category['name']); ?>
             </h2>
@@ -87,11 +110,11 @@ include __DIR__ . '/includes/header.php';
                 <p class="text-muted mb-2"><?php echo htmlspecialchars($category['description']); ?></p>
             <?php endif; ?>
 
-            <div class="grid grid-4">
+            <div class="grid grid-3 product-grid">
                 <?php foreach ($products as $product): ?>
-                    <div class="card">
+                    <div class="card product-card" data-name="<?php echo htmlspecialchars(strtolower($product['name'])); ?>">
                         <div class="card-body">
-                            <div style="font-size: 2rem; text-align: center; margin-bottom: 0.5rem;">
+                            <div class="product-image-placeholder">
                                 <?php
                                 $icons = [
                                     'Coffee' => '&#9749;',
@@ -103,19 +126,17 @@ include __DIR__ . '/includes/header.php';
                                 echo $icons[$category['name']] ?? '&#127869;';
                                 ?>
                             </div>
-                            <h3 style="font-size: 1rem; margin-bottom: 0.25rem;"><?php echo htmlspecialchars($product['name']); ?></h3>
-                            <p style="font-size: 0.8rem; color: var(--neutral-500); margin-bottom: 0.25rem;"><?php echo htmlspecialchars($category['name']); ?></p>
+                            <h3 class="product-name"><?php echo htmlspecialchars($product['name']); ?></h3>
+                            <p class="product-category-label"><?php echo htmlspecialchars($category['name']); ?></p>
                             <?php if ($product['description']): ?>
-                                <p style="font-size: 0.8rem; color: var(--neutral-500); margin-bottom: 0.5rem;"><?php echo htmlspecialchars($product['description']); ?></p>
+                                <p class="product-description"><?php echo htmlspecialchars($product['description']); ?></p>
                             <?php endif; ?>
-                            <p style="font-size: 1.1rem; font-weight: 700; color: var(--primary); margin-bottom: 0.75rem;">
-                                RM <?php echo number_format((float) $product['price'], 2); ?>
-                            </p>
-                            <form method="POST" action="">
+                            <p class="product-price">RM <?php echo number_format((float) $product['price'], 2); ?></p>
+                            <form method="POST" action="" class="add-to-cart-form">
                                 <input type="hidden" name="product_id" value="<?php echo (int) $product['id']; ?>">
                                 <div class="d-flex gap-1 align-center">
                                     <input type="number" name="quantity" value="1" min="1" max="99"
-                                           class="form-input" style="width: 60px; text-align: center;">
+                                           class="form-input qty-input" style="width: 60px; text-align: center;">
                                     <button type="submit" class="btn btn-primary btn-sm" style="flex: 1;">
                                         Add to Cart
                                     </button>
@@ -128,5 +149,60 @@ include __DIR__ . '/includes/header.php';
         </section>
     <?php endforeach; ?>
 <?php endif; ?>
+
+<script>
+// Category filter tabs
+document.addEventListener('DOMContentLoaded', function() {
+    const tabs = document.querySelectorAll('.category-tab');
+    const sections = document.querySelectorAll('.category-section');
+    const searchInput = document.getElementById('menuSearch');
+    const productCards = document.querySelectorAll('.product-card');
+
+    // Category filter
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            tabs.forEach(function(t) { t.classList.remove('active'); });
+            this.classList.add('active');
+
+            const category = this.getAttribute('data-category');
+
+            sections.forEach(function(section) {
+                if (category === 'all') {
+                    section.style.display = 'block';
+                } else {
+                    section.style.display = section.getAttribute('data-category') === category ? 'block' : 'none';
+                }
+            });
+        });
+    });
+
+    // Search filter
+    if (searchInput) {
+        searchInput.addEventListener('keyup', function() {
+            const query = this.value.toLowerCase().trim();
+
+            productCards.forEach(function(card) {
+                const name = card.getAttribute('data-name');
+                if (name.indexOf(query) !== -1) {
+                    card.style.display = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+
+            // Show/hide category sections based on visible products
+            sections.forEach(function(section) {
+                const visibleCards = section.querySelectorAll('.product-card[style*="display: none"]');
+                const totalCards = section.querySelectorAll('.product-card');
+                if (visibleCards.length === totalCards.length && totalCards.length > 0) {
+                    section.style.display = 'none';
+                } else {
+                    section.style.display = '';
+                }
+            });
+        });
+    }
+});
+</script>
 
 <?php include __DIR__ . '/includes/footer.php'; ?>

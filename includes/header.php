@@ -4,6 +4,7 @@
  * 
  * Renders the <head> section, opening <body> tag, and navigation bar.
  * Navigation links change based on user role.
+ * Shows cart item count badge for customers.
  */
 ?>
 <!DOCTYPE html>
@@ -30,7 +31,20 @@
             <?php if (!isset($_SESSION['role']) || $_SESSION['role'] === 'customer'): ?>
                 <!-- Customer Navigation -->
                 <li class="nav-item"><a href="/smart-transaction/index.php" class="nav-link">Menu</a></li>
-                <li class="nav-item"><a href="/smart-transaction/cart.php" class="nav-link">Cart</a></li>
+                <li class="nav-item">
+                    <a href="/smart-transaction/cart.php" class="nav-link cart-nav-link">
+                        Cart
+                        <?php 
+                        $cartCount = 0;
+                        foreach (($_SESSION['cart'] ?? []) as $qty) {
+                            $cartCount += (int) $qty;
+                        }
+                        if ($cartCount > 0): 
+                        ?>
+                            <span class="cart-badge"><?php echo $cartCount; ?></span>
+                        <?php endif; ?>
+                    </a>
+                </li>
                 <li class="nav-item"><a href="/smart-transaction/tracking.php" class="nav-link">Track Order</a></li>
                 <li class="nav-item"><a href="/smart-transaction/transaction-history.php" class="nav-link">History</a></li>
             <?php endif; ?>
