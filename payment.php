@@ -10,6 +10,8 @@
  * 
  * Cash: Order stays unpaid — staff confirms payment in admin panel.
  * Online/E-Wallet: Payment processed immediately with mock simulation.
+ * 
+ * All totals are fetched from the DATABASE, not from session.
  */
 
 require_once __DIR__ . '/includes/session.php';
@@ -51,6 +53,34 @@ try {
         header('Location: /smart-transaction/receipt.php?order_id=' . $orderId);
         exit;
     }
+
+    // ============================================================
+    // CALCULATE FROM DATABASE
+    // ============================================================
+    $subtotal = 0;
+    foreach ($orderItems as $item) {
+        $subtotal += (float) $item['unit_price'] * (int) $item['quantity'];
+    }
+    $subtotal = round($subtotal, 2);
+
+    $discountPercent = 0;
+    $couponCode = null;
+    $discountAmount = 0;
+
+    if ($order['coupon_id']) {
+        $couponStmt = $pdo->prepare('SELECT * FROM coupons WHERE id = :id LIMIT 1');
+        $couponStmt->execute([':id' => $order['coupon_id']]);
+        $couponInfo = $couponStmt->fetch();
+
+        if ($couponInfo) {
+            $discountPercent = (float) $couponInfo['discount_percent'];
+            $couponCode = $couponInfo['coupon_code'];
+            $discountAmount = round($subtotal * ($discountPercent / 100), 2);
+        }
+    }
+
+    $orderTotal = (float) $order['total_amount'];
+
 } catch (PDOException $e) {
     $error = 'Unable to load order details.';
 }
@@ -67,8 +97,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_payment'])) {
 
             if ($paymentMethod === 'cash') {
                 // Cash: Order stays unpaid — staff will confirm payment later
-                // Just update the order status to 'pending' (already is)
-                // No payment or transaction records created yet
                 $pdo->commit();
 
                 // If AJAX request, return JSON
@@ -83,7 +111,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_payment'])) {
             }
 
             // Online / E-Wallet: Process payment immediately
-            // Generate a unique transaction reference
             $methodPrefixes = [
                 'online' => 'ONLINE',
                 'ewallet' => 'EWALLET',
@@ -96,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_payment'])) {
             $payStmt->execute([
                 ':order_id' => $orderId,
                 ':method'   => $paymentMethod,
-                ':amount'   => $order['total_amount'],
+                ':amount'   => $orderTotal,
                 ':ref'      => $transactionRef,
                 ':status'   => 'completed',
             ]);
@@ -114,7 +141,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_payment'])) {
             $transStmt->execute([
                 ':order_id'   => $orderId,
                 ':payment_id' => $paymentId,
-                ':total'      => $order['total_amount'],
+                ':total'      => $orderTotal,
                 ':method'     => $paymentMethod,
                 ':status'     => 'completed',
             ]);
@@ -174,9 +201,29 @@ include __DIR__ . '/includes/header.php';
                 </div>
             <?php endforeach; ?>
 
+            <hr style="margin: 0.75rem 0; border: none; border-top: 1px solid var(--neutral-200);">
+
+            <!-- Subtotal -->
+            <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; font-size: 0.9rem;">
+                <span>Subtotal</span>
+                <span>RM <?php echo number_format($subtotal, 2); ?></span>
+            </div>
+
+            <!-- Discount (only if coupon applied) -->
+            <?php if ($discountAmount > 0 && $couponCode): ?>
+                <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; font-size: 0.9rem; color: #16a34a;">
+                    <span>Discount (<?php echo (int) $discountPercent; ?>% off)</span>
+                    <span>- RM <?php echo number_format($discountAmount, 2); ?></span>
+                </div>
+                <div style="font-size: 0.8rem; color: var(--neutral-500); text-align: right; padding-bottom: 0.25rem;">
+                    Coupon: <?php echo htmlspecialchars($couponCode); ?>
+                </div>
+            <?php endif; ?>
+
+            <!-- Total -->
             <div class="receipt-total" style="border-top-color: var(--neutral-300);">
                 <span>Total</span>
-                <span>RM <?php echo number_format((float) $order['total_amount'], 2); ?></span>
+                <span>RM <?php echo number_format($orderTotal, 2); ?></span>
             </div>
         </div>
     </div>
@@ -225,7 +272,7 @@ include __DIR__ . '/includes/header.php';
                 </div>
 
                 <button type="submit" name="process_payment" value="1" class="btn btn-success btn-block btn-lg mt-2" id="payButton">
-                    Place Order — RM <?php echo number_format((float) $order['total_amount'], 2); ?>
+                    Place Order — RM <?php echo number_format($orderTotal, 2); ?>
                 </button>
             </form>
         </div>
@@ -267,7 +314,7 @@ include __DIR__ . '/includes/header.php';
                 </div>
                 <div class="mock-portal-row">
                     <span>Amount:</span>
-                    <span><strong>RM <?php echo number_format((float) $order['total_amount'], 2); ?></strong></span>
+                    <span><strong>RM <?php echo number_format($orderTotal, 2); ?></strong></span>
                 </div>
                 <div class="mock-portal-row">
                     <span>Reference:</span>
@@ -309,7 +356,7 @@ include __DIR__ . '/includes/header.php';
                 </div>
                 <div class="mock-portal-row">
                     <span>Amount:</span>
-                    <span><strong>RM <?php echo number_format((float) $order['total_amount'], 2); ?></strong></span>
+                    <span><strong>RM <?php echo number_format($orderTotal, 2); ?></strong></span>
                 </div>
                 <div class="mock-portal-row">
                     <span>Reference:</span>
@@ -355,10 +402,10 @@ document.addEventListener('DOMContentLoaded', function() {
         radio.addEventListener('change', function() {
             if (this.value === 'cash') {
                 cashMsg.style.display = 'block';
-                payBtn.textContent = 'Place Order — RM <?php echo number_format((float) $order['total_amount'], 2); ?>';
+                payBtn.textContent = 'Place Order — RM <?php echo number_format($orderTotal, 2); ?>';
             } else {
                 cashMsg.style.display = 'none';
-                payBtn.textContent = 'Confirm Payment — RM <?php echo number_format((float) $order['total_amount'], 2); ?>';
+                payBtn.textContent = 'Confirm Payment — RM <?php echo number_format($orderTotal, 2); ?>';
             }
         });
     });

@@ -445,7 +445,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
     </div>
 
     <div class="site-footer">
-        Smart Transaction System &copy; 2026 | QS Cafe
+        Smart Transaction System &copy; 2026
     </div>
 </div>
 

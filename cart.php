@@ -6,16 +6,26 @@
  * Customer info auto-filled from logged-in session.
  * On checkout: saves order to database and redirects to payment.php.
  * Stores customer_id in orders table.
+ * 
+ * Coupon system: Grab-style click-to-select, no manual code input.
  */
 
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/customer_auth.php';
+require_once __DIR__ . '/includes/coupon_helper.php';
 
 startSession();
 requireCustomerLogin();
 
 $pageTitle = 'Cart - Smart Transaction System';
+
+// Handle coupon removal via GET (fallback if JS fails)
+if (isset($_GET['remove_coupon'])) {
+    unset($_SESSION['applied_coupon']);
+    header('Location: /smart-transaction/cart.php');
+    exit;
+}
 
 // Initialize cart
 if (!isset($_SESSION['cart'])) {
@@ -34,6 +44,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 unset($_SESSION['cart'][(int) $productId]);
             }
         }
+        // Clear applied coupon when cart changes
+        unset($_SESSION['applied_coupon']);
         header('Location: /smart-transaction/cart.php');
         exit;
     }
@@ -42,6 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['remove_item'])) {
         $productId = (int) $_POST['remove_item'];
         unset($_SESSION['cart'][$productId]);
+        // Clear applied coupon when cart changes
+        unset($_SESSION['applied_coupon']);
         header('Location: /smart-transaction/cart.php');
         exit;
     }
@@ -86,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $qty = (int) ($_SESSION['cart'][$pid] ?? 0);
                 if ($qty <= 0) continue;
                 $unitPrice = (float) $product['price'];
-                $subtotal = $unitPrice * $qty;
+                $subtotal = round($unitPrice * $qty, 2);
                 $totalAmount += $subtotal;
                 $orderItems[] = [
                     'product_id'   => $pid,
@@ -104,25 +118,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
 
+            // Apply coupon discount if available
+            $finalAmount = $totalAmount;
+            $couponId = null;
+            $couponCode = null;
+            $discountAmount = 0;
+            $discountPercent = 0;
+
+            if (isset($_SESSION['applied_coupon']) && $_SESSION['applied_coupon']['valid']) {
+                $applied = $_SESSION['applied_coupon'];
+                $finalAmount = $applied['final_total'];
+                $couponId = $applied['coupon_id'];
+                $couponCode = $applied['coupon_code'];
+                $discountAmount = $applied['discount_amount'];
+                $discountPercent = $applied['discount_percent'];
+            }
+
             // Begin transaction
             $pdo->beginTransaction();
 
-            // Insert order
+            // Insert order (with coupon_id if applicable)
             $orderStmt = $pdo->prepare("
                 INSERT INTO orders 
-                (customer_id, customer_name, customer_phone, total_amount, status, payment_status, created_at, updated_at) 
+                (customer_id, customer_name, customer_phone, total_amount, coupon_id, status, payment_status, created_at, updated_at) 
                 VALUES 
-                (:customer_id, :customer_name, :customer_phone, :total_amount, 'pending', 'unpaid', NOW(), NOW())
+                (:customer_id, :customer_name, :customer_phone, :total_amount, :coupon_id, 'pending', 'unpaid', NOW(), NOW())
             ");
             $orderStmt->execute([
                 ':customer_id'    => $_SESSION['customer_id'] ?? null,
                 ':customer_name'  => $_SESSION['customer_name'] ?? '',
                 ':customer_phone' => $_SESSION['customer_phone'] ?? '',
-                ':total_amount'   => $totalAmount,
+                ':total_amount'   => $finalAmount,
+                ':coupon_id'      => $couponId,
             ]);
             $orderId = (int) $pdo->lastInsertId();
 
-            // Insert order items
+            // Insert order items with rounded subtotals
             $itemStmt = $pdo->prepare('INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, subtotal) VALUES (:order_id, :product_id, :product_name, :quantity, :unit_price, :subtotal)');
             foreach ($orderItems as $item) {
                 $itemStmt->execute([
@@ -133,6 +164,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     ':unit_price'   => $item['unit_price'],
                     ':subtotal'     => $item['subtotal'],
                 ]);
+            }
+
+            // Mark coupon as used if applied
+            if ($couponId) {
+                markCouponAsUsed($pdo, $couponId, $orderId);
             }
 
             // Log order status
@@ -146,8 +182,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $pdo->commit();
 
-            // Clear cart and store order ID in session for payment
+            // Store order details in session for receipt
+            $_SESSION['last_order'] = [
+                'order_id'        => $orderId,
+                'subtotal'        => $totalAmount,
+                'discount_amount' => $discountAmount,
+                'discount_percent'=> $discountPercent,
+                'coupon_code'     => $couponCode,
+                'total_amount'    => $finalAmount,
+            ];
+
+            // Clear cart and coupon
             $_SESSION['cart'] = [];
+            unset($_SESSION['applied_coupon']);
             $_SESSION['last_order_id'] = $orderId;
 
             header('Location: /smart-transaction/payment.php?order_id=' . $orderId);
@@ -157,7 +204,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (isset($pdo) && $pdo->inTransaction()) {
                 $pdo->rollBack();
             }
-            // Log the actual error for debugging
             error_log('Order placement error: ' . $e->getMessage());
             $_SESSION['flash_message'] = 'Order failed: ' . $e->getMessage();
             $_SESSION['flash_type'] = 'danger';
@@ -183,7 +229,7 @@ if (!empty($_SESSION['cart'])) {
         foreach ($products as $product) {
             $pid = (int) $product['id'];
             $qty = $_SESSION['cart'][$pid];
-            $subtotal = (float) $product['price'] * $qty;
+            $subtotal = round((float) $product['price'] * $qty, 2);
             $cartTotal += $subtotal;
             $cartItems[] = [
                 'id'       => $pid,
@@ -256,14 +302,63 @@ include __DIR__ . '/includes/header.php';
         <div class="card">
             <div class="card-header">Checkout</div>
             <div class="card-body">
-                <div class="cart-summary">
+                <!-- ============================================================ -->
+                <!-- Grab-Style Coupon Selection (No Code Input) -->
+                <!-- ============================================================ -->
+                <div class="coupon-section" style="margin-bottom: 1rem; padding-bottom: 1rem; border-bottom: 1px solid var(--neutral-200);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+                        <strong style="font-size: 0.95rem;">&#127873; Available Coupons</strong>
+                        <span id="couponLoading" style="font-size: 0.8rem; color: var(--neutral-500); display: none;">Loading...</span>
+                    </div>
+
+                    <!-- Coupon cards container (populated by AJAX) -->
+                    <div id="couponCardsContainer">
+                        <!-- Applied coupon display (shown when coupon is applied) -->
+                        <div id="appliedCouponDisplay" style="display: none;">
+                            <div style="background: #dcfce7; border: 2px solid #16a34a; border-radius: 8px; padding: 0.75rem;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <strong style="color: #166534;">&#9989; Coupon Applied!</strong>
+                                        <p style="margin: 0.25rem 0 0 0; font-size: 0.85rem; color: #166534;">
+                                            <span id="appliedCouponInfo"></span>
+                                        </p>
+                                    </div>
+                                    <button type="button" id="removeCouponBtn" class="btn btn-sm btn-danger" style="font-size: 0.75rem;">&#10005; Remove</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Coupon list (populated by AJAX) -->
+                        <div id="couponList"></div>
+
+                        <!-- No coupons message (shown by AJAX if empty) -->
+                        <div id="noCouponsMessage" style="display: none;">
+                            <div style="background: #f5f5f4; border: 1px solid #e7e5e4; border-radius: 8px; padding: 1rem; text-align: center;">
+                                <p style="font-size: 1.5rem; margin-bottom: 0.5rem;">&#127873;</p>
+                                <p style="color: var(--neutral-600); font-size: 0.9rem; margin: 0;">
+                                    <strong>No coupons available</strong>
+                                </p>
+                                <p style="color: var(--neutral-500); font-size: 0.8rem; margin: 0.25rem 0 0 0;">
+                                    Complete more orders to earn discount coupons!
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Order Summary -->
+                <div class="cart-summary" id="orderSummary">
                     <div class="summary-row">
                         <span>Subtotal (<?php echo count($cartItems); ?> items)</span>
-                        <span>RM <?php echo number_format($cartTotal, 2); ?></span>
+                        <span id="summarySubtotal">RM <?php echo number_format($cartTotal, 2); ?></span>
+                    </div>
+                    <div class="summary-row" id="summaryDiscountRow" style="color: #16a34a; display: none;">
+                        <span>Discount (<span id="summaryDiscountPercent">0</span>%)</span>
+                        <span>- RM <span id="summaryDiscountAmount">0.00</span></span>
                     </div>
                     <div class="summary-row total">
                         <span>Total</span>
-                        <span>RM <?php echo number_format($cartTotal, 2); ?></span>
+                        <span id="summaryTotal">RM <?php echo number_format($cartTotal, 2); ?></span>
                     </div>
                 </div>
 
@@ -287,5 +382,301 @@ include __DIR__ . '/includes/header.php';
         </div>
     </div>
 <?php endif; ?>
+
+<!-- Coupon AJAX Script -->
+<style>
+.coupon-card-selectable {
+    border: 2px solid #e7e5e4;
+    border-radius: 10px;
+    padding: 0.85rem;
+    margin-bottom: 0.75rem;
+    background: #fff;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    position: relative;
+}
+.coupon-card-selectable:hover {
+    border-color: #01696f;
+    box-shadow: 0 2px 8px rgba(1, 105, 111, 0.1);
+}
+.coupon-card-selectable.selected {
+    border-color: #16a34a;
+    background: #f0fdf4;
+}
+.coupon-card-selectable.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+.coupon-tier-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: #fff;
+}
+.coupon-tier-1 { background: #0d9488; }
+.coupon-tier-2 { background: #16a34a; }
+.coupon-tier-3 { background: #2563eb; }
+.coupon-tier-4 { background: #7c3aed; }
+.coupon-tier-5 { background: #d97706; }
+.coupon-use-btn {
+    display: block;
+    width: 100%;
+    padding: 0.5rem;
+    background: #01696f;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    text-align: center;
+    margin-top: 0.5rem;
+}
+.coupon-use-btn:hover {
+    background: #014d52;
+}
+.coupon-use-btn:disabled {
+    background: #d6d3d1;
+    cursor: not-allowed;
+}
+.coupon-use-btn.used {
+    background: #16a34a;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var cartTotal = <?php echo json_encode($cartTotal); ?>;
+    var couponList = document.getElementById('couponList');
+    var noCouponsMsg = document.getElementById('noCouponsMessage');
+    var appliedDisplay = document.getElementById('appliedCouponDisplay');
+    var removeBtn = document.getElementById('removeCouponBtn');
+    var summaryDiscountRow = document.getElementById('summaryDiscountRow');
+    var summaryDiscountPercent = document.getElementById('summaryDiscountPercent');
+    var summaryDiscountAmount = document.getElementById('summaryDiscountAmount');
+    var summaryTotal = document.getElementById('summaryTotal');
+    var summarySubtotal = document.getElementById('summarySubtotal');
+    var appliedCouponInfo = document.getElementById('appliedCouponInfo');
+    var couponLoading = document.getElementById('couponLoading');
+
+    // ============================================================
+    // Load coupons via AJAX on page load
+    // ============================================================
+    function loadCoupons() {
+        if (!couponList) return;
+
+        couponLoading.style.display = 'inline';
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/smart-transaction/get_customer_coupons.php', true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.onload = function() {
+            couponLoading.style.display = 'none';
+            if (xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText);
+                    if (data.error) {
+                        couponList.innerHTML = '';
+                        noCouponsMsg.style.display = 'block';
+                        return;
+                    }
+                    renderCoupons(data.coupons, data.order_total);
+                } catch(e) {
+                    couponList.innerHTML = '';
+                    noCouponsMsg.style.display = 'block';
+                }
+            } else {
+                couponList.innerHTML = '';
+                noCouponsMsg.style.display = 'block';
+            }
+        };
+        xhr.onerror = function() {
+            couponLoading.style.display = 'none';
+            couponList.innerHTML = '';
+            noCouponsMsg.style.display = 'block';
+        };
+        xhr.send('order_total=' + cartTotal);
+    }
+
+    // ============================================================
+    // Render coupon cards
+    // ============================================================
+    function renderCoupons(coupons, orderTotal) {
+        if (!coupons || coupons.length === 0) {
+            couponList.innerHTML = '';
+            noCouponsMsg.style.display = 'block';
+            return;
+        }
+
+        noCouponsMsg.style.display = 'none';
+        var html = '';
+
+        coupons.forEach(function(coupon) {
+            var tierClass = 'coupon-tier-' + (coupon.tier || 1);
+            var savings = 'RM ' + coupon.discount_amount.toFixed(2);
+
+            html += '<div class="coupon-card-selectable" data-coupon-id="' + coupon.id + '">';
+            html += '  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.5rem;">';
+            html += '    <div>';
+            html += '      <span class="coupon-tier-badge ' + tierClass + '">' + escapeHtml(coupon.tier_name || 'Tier ' + coupon.tier) + '</span>';
+            html += '      <div style="font-size: 1.3rem; font-weight: bold; color: #01696f; margin-top: 0.25rem;">' + parseInt(coupon.discount_percent) + '% OFF</div>';
+            html += '    </div>';
+            html += '    <div style="text-align: right; font-size: 0.8rem; color: var(--neutral-500);">';
+            html += '      <div>Expires: ' + escapeHtml(coupon.expires_formatted) + '</div>';
+            html += '    </div>';
+            html += '  </div>';
+            html += '  <div style="font-size: 0.85rem; color: var(--neutral-600); margin-bottom: 0.5rem;">';
+            html += '    Code: <strong>' + escapeHtml(coupon.coupon_code) + '</strong>';
+            html += '  </div>';
+            html += '  <div style="font-size: 0.85rem; color: #16a34a; margin-bottom: 0.5rem;">';
+            html += '    You save: <strong>' + savings + '</strong> on this order';
+            html += '  </div>';
+            html += '  <button type="button" class="coupon-use-btn" data-coupon-id="' + coupon.id + '" data-discount="' + coupon.discount_percent + '" data-amount="' + coupon.discount_amount.toFixed(2) + '" data-final="' + coupon.final_total.toFixed(2) + '">Use This Coupon</button>';
+            html += '</div>';
+        });
+
+        couponList.innerHTML = html;
+
+        // Attach click handlers to "Use This Coupon" buttons
+        couponList.querySelectorAll('.coupon-use-btn').forEach(function(btn) {
+            btn.addEventListener('click', function(e) {
+                e.stopPropagation();
+                var couponId = this.getAttribute('data-coupon-id');
+                applyCoupon(couponId, orderTotal, this);
+            });
+        });
+    }
+
+    // ============================================================
+    // Apply coupon via AJAX
+    // ============================================================
+    function applyCoupon(couponId, orderTotal, btnElement) {
+        btnElement.disabled = true;
+        btnElement.textContent = 'Applying...';
+
+        var xhr = new XMLHttpRequest();
+        xhr.open('POST', '/smart-transaction/apply_coupon.php', true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.onload = function() {
+            if (xhr.status === 200) {
+                try {
+                    var result = JSON.parse(xhr.responseText);
+                    if (result.success) {
+                        // Mark this coupon as selected
+                        var card = btnElement.closest('.coupon-card-selectable');
+                        couponList.querySelectorAll('.coupon-card-selectable').forEach(function(c) {
+                            if (c === card) {
+                                c.classList.add('selected');
+                            } else {
+                                c.classList.add('disabled');
+                            }
+                        });
+
+                        // Update all buttons
+                        couponList.querySelectorAll('.coupon-use-btn').forEach(function(b) {
+                            if (b !== btnElement) {
+                                b.disabled = true;
+                                b.textContent = 'Unavailable';
+                            } else {
+                                b.textContent = '&#9989; Applied';
+                                b.classList.add('used');
+                            }
+                        });
+
+                        // Show applied display
+                        appliedCouponInfo.innerHTML = 'Code: <strong>' + escapeHtml(result.coupon_code) + '</strong> &mdash; ' + result.discount_percent + '% off (' + escapeHtml(result.tier_name) + ')';
+                        appliedDisplay.style.display = 'block';
+
+                        // Update order summary
+                        summaryDiscountPercent.textContent = result.discount_percent;
+                        summaryDiscountAmount.textContent = result.discount_amount;
+                        summaryDiscountRow.style.display = 'flex';
+                        summaryTotal.textContent = 'RM ' + result.final_total;
+
+                    } else {
+                        alert(result.error || 'Failed to apply coupon.');
+                        btnElement.disabled = false;
+                        btnElement.textContent = 'Use This Coupon';
+                    }
+                } catch(e) {
+                    alert('An error occurred. Please try again.');
+                    btnElement.disabled = false;
+                    btnElement.textContent = 'Use This Coupon';
+                }
+            } else {
+                alert('Server error. Please try again.');
+                btnElement.disabled = false;
+                btnElement.textContent = 'Use This Coupon';
+            }
+        };
+        xhr.onerror = function() {
+            alert('Network error. Please try again.');
+            btnElement.disabled = false;
+            btnElement.textContent = 'Use This Coupon';
+        };
+        xhr.send('coupon_id=' + couponId + '&order_total=' + orderTotal);
+    }
+
+    // ============================================================
+    // Remove coupon via AJAX
+    // ============================================================
+    if (removeBtn) {
+        removeBtn.addEventListener('click', function() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('POST', '/smart-transaction/remove_coupon.php', true);
+            xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+            xhr.onload = function() {
+                if (xhr.status === 200) {
+                    // Reset all coupon cards
+                    couponList.querySelectorAll('.coupon-card-selectable').forEach(function(c) {
+                        c.classList.remove('selected', 'disabled');
+                    });
+                    couponList.querySelectorAll('.coupon-use-btn').forEach(function(b) {
+                        b.disabled = false;
+                        b.textContent = 'Use This Coupon';
+                        b.classList.remove('used');
+                    });
+
+                    // Hide applied display
+                    appliedDisplay.style.display = 'none';
+
+                    // Restore original total
+                    summaryDiscountRow.style.display = 'none';
+                    summaryTotal.textContent = 'RM ' + cartTotal.toFixed(2);
+                }
+            };
+            xhr.send();
+        });
+    }
+
+    // ============================================================
+    // Check if coupon is already applied (from session)
+    // ============================================================
+    function checkAppliedCoupon() {
+        // If the page was loaded with an applied coupon (from session),
+        // we need to reflect that in the UI. This is handled by the
+        // initial page load — the coupon section will show the applied state.
+        // We reload coupons and check session state.
+    }
+
+    // ============================================================
+    // Utility: escape HTML
+    // ============================================================
+    function escapeHtml(str) {
+        if (!str) return '';
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    // ============================================================
+    // Initialize: load coupons on page load
+    // ============================================================
+    loadCoupons();
+});
+</script>
 
 <?php include __DIR__ . '/includes/footer.php'; ?>

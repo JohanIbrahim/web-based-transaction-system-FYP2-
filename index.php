@@ -11,6 +11,7 @@
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/customer_auth.php';
+require_once __DIR__ . '/includes/coupon_helper.php';
 
 startSession();
 
@@ -34,6 +35,26 @@ if (isCustomerLoggedIn()) {
 }
 
 $pageTitle = 'Menu - Smart Transaction System';
+
+// Fetch active coupons for notification banner
+$activeCouponBanner = null;
+if (isCustomerLoggedIn()) {
+    try {
+        $pdo = getDBConnection();
+        $stmt = $pdo->prepare("
+            SELECT * FROM coupons 
+            WHERE customer_id = :customer_id 
+            AND is_used = 0 
+            AND expires_at > NOW() 
+            ORDER BY issued_at DESC 
+            LIMIT 1
+        ");
+        $stmt->execute([':customer_id' => $_SESSION['customer_id']]);
+        $activeCouponBanner = $stmt->fetch();
+    } catch (PDOException $e) {
+        // Silently fail
+    }
+}
 
 // Initialize cart in session if not exists
 if (!isset($_SESSION['cart'])) {
@@ -95,6 +116,17 @@ include __DIR__ . '/includes/header.php';
 
 <?php if (isset($error)): ?>
     <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
+<?php endif; ?>
+
+<?php if ($activeCouponBanner): ?>
+    <div class="alert alert-success" style="background: #dcfce7; border: 1px solid #bbf7d0; color: #166534; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+        <span>
+            &#127873; <strong>You have a coupon!</strong> 
+            Use code <code style="background: #bbf7d0; padding: 0.15rem 0.5rem; border-radius: 4px; font-weight: bold;"><?php echo htmlspecialchars($activeCouponBanner['coupon_code']); ?></code> 
+            for <strong><?php echo (int) $activeCouponBanner['discount_percent']; ?>% off</strong> your next order!
+        </span>
+        <a href="/smart-transaction/cart.php" class="btn btn-sm btn-primary">Use Now</a>
+    </div>
 <?php endif; ?>
 
 <div class="page-header">

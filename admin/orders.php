@@ -13,6 +13,7 @@
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/admin_auth.php';
+require_once __DIR__ . '/../includes/coupon_helper.php';
 
 startSession();
 requireAdminLogin();
@@ -120,8 +121,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                             ':changed_by' => $userId,
                         ]);
 
-                        $_SESSION['flash_message'] = 'Order #' . $orderId . ' status updated to ' . ucfirst($newStatus) . '.';
-                        $_SESSION['flash_type'] = 'success';
+                        // Award coupon if order is completed
+                        if ($newStatus === 'completed' && $order['customer_id']) {
+                            $coupon = awardCouponIfEligible($pdo, $order['customer_id']);
+                            if ($coupon) {
+                                $_SESSION['flash_message'] = 'Order #' . $orderId . ' completed! 🎉 Customer earned coupon: ' . $coupon['code'] . ' (' . $coupon['discount'] . '% off ' . $coupon['tier_name'] . ')';
+                                $_SESSION['flash_type'] = 'success';
+                            } else {
+                                $_SESSION['flash_message'] = 'Order #' . $orderId . ' status updated to ' . ucfirst($newStatus) . '.';
+                                $_SESSION['flash_type'] = 'success';
+                            }
+                        } else {
+                            $_SESSION['flash_message'] = 'Order #' . $orderId . ' status updated to ' . ucfirst($newStatus) . '.';
+                            $_SESSION['flash_type'] = 'success';
+                        }
                     }
                     break;
             }
@@ -222,7 +235,7 @@ include __DIR__ . '/../includes/header.php';
                             <td>
                                 <div class="d-flex gap-1 flex-wrap" style="align-items: center;">
                                     <!-- View Details -->
-                                    <a href="/smart-transaction/receipt.php?order_id=<?php echo (int) $order['id']; ?>" class="btn btn-sm btn-outline" target="_blank">View</a>
+                                    <a href="/smart-transaction/receipt.php?order_id=<?php echo (int) $order['id']; ?>" class="btn btn-sm btn-outline" target="_blank">View Receipt</a>
 
                                     <!-- Confirm Cash Payment (only for unpaid orders) -->
                                     <?php if ($order['payment_status'] === 'unpaid'): ?>

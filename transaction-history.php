@@ -11,6 +11,7 @@
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/customer_auth.php';
+require_once __DIR__ . '/includes/coupon_helper.php';
 
 startSession();
 requireCustomerLogin();
@@ -19,6 +20,7 @@ $pageTitle = 'My Orders - Smart Transaction System';
 
 $activeOrders = [];
 $pastOrders = [];
+$coupons = [];
 
 try {
     $pdo = getDBConnection();
@@ -79,6 +81,15 @@ try {
         }
     }
 
+    // Fetch customer coupons
+    $couponStmt = $pdo->prepare('
+        SELECT * FROM coupons 
+        WHERE customer_id = :customer_id 
+        ORDER BY issued_at DESC
+    ');
+    $couponStmt->execute([':customer_id' => $customerId]);
+    $coupons = $couponStmt->fetchAll();
+
 } catch (PDOException $e) {
     error_log('My Orders page error: ' . $e->getMessage());
     $error = 'An error occurred. Please try again later.';
@@ -108,6 +119,18 @@ include __DIR__ . '/includes/header.php';
         Order History
         <?php if (!empty($pastOrders)): ?>
             <span class="badge badge-completed" style="margin-left: 0.5rem; font-size: 0.7rem;"><?php echo count($pastOrders); ?></span>
+        <?php endif; ?>
+    </button>
+    <button class="order-tab" data-tab="coupons">
+        My Coupons
+        <?php 
+        $activeCouponCount = 0;
+        foreach ($coupons as $c) {
+            if (!$c['is_used'] && strtotime($c['expires_at']) > time()) $activeCouponCount++;
+        }
+        ?>
+        <?php if ($activeCouponCount > 0): ?>
+            <span class="badge badge-paid" style="margin-left: 0.5rem; font-size: 0.7rem;"><?php echo $activeCouponCount; ?></span>
         <?php endif; ?>
     </button>
 </div>
@@ -249,7 +272,12 @@ include __DIR__ . '/includes/header.php';
                                     <td><strong>#<?php echo $orderId; ?></strong></td>
                                     <td><?php echo date('d M Y, h:i A', strtotime($order['created_at'])); ?></td>
                                     <td style="font-size: 0.85rem;"><?php echo $itemSummaryStr; ?></td>
-                                    <td><strong>RM <?php echo number_format((float) $order['total_amount'], 2); ?></strong></td>
+                                    <td>
+                                        <strong>RM <?php echo number_format((float) $order['total_amount'], 2); ?></strong>
+                                        <?php if ($order['coupon_id']): ?>
+                                            <br><span style="font-size: 0.7rem; color: #16a34a;">&#127873; Coupon used</span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <?php 
                                         $methodLabels = ['cash' => 'Cash', 'online' => 'Online', 'ewallet' => 'E-Wallet'];
@@ -276,6 +304,77 @@ include __DIR__ . '/includes/header.php';
                     </table>
                 </div>
             </div>
+        </div>
+    <?php endif; ?>
+</div>
+
+<!-- ============================================================ -->
+<!-- SECTION 3: MY COUPONS -->
+<!-- ============================================================ -->
+<div id="couponsSection" class="order-section" style="display: none;">
+    <?php if (empty($coupons)): ?>
+        <div class="card">
+            <div class="card-body text-center" style="padding: var(--spacing-2xl);">
+                <p style="font-size: 3rem; margin-bottom: 1rem;">&#127873;</p>
+                <h3>No coupons yet</h3>
+                <p class="text-muted mt-1">Complete your 2nd order to earn your first coupon reward! 🎉</p>
+                <a href="/smart-transaction/index.php" class="btn btn-primary mt-2">Browse Menu</a>
+            </div>
+        </div>
+    <?php else: ?>
+        <div style="margin-bottom: 1rem;">
+            <p style="color: var(--neutral-600);">
+                You have <strong style="color: var(--primary);"><?php echo $activeCouponCount; ?> active coupon(s)</strong> available to use.
+            </p>
+        </div>
+        <div class="coupon-grid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem;">
+            <?php foreach ($coupons as $coupon): 
+                $isExpired = strtotime($coupon['expires_at']) < time();
+                $isActive = !$coupon['is_used'] && !$isExpired;
+                $isUsed = $coupon['is_used'];
+            ?>
+                <div class="card coupon-card" style="border-left: 4px solid <?php echo $isActive ? '#16a34a' : ($isUsed ? '#dc2626' : '#f59e0b'); ?>;">
+                    <div class="card-body">
+                        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+                            <div>
+                                <strong style="font-size: 1.1rem; font-family: monospace; letter-spacing: 0.5px; color: var(--primary);">
+                                    <?php echo htmlspecialchars($coupon['coupon_code']); ?>
+                                </strong>
+                                <div style="margin-top: 0.25rem;">
+                                    <span class="badge badge-<?php echo $coupon['tier']; ?>" style="background: var(--primary); color: white; font-size: 0.7rem;">
+                                        <?php echo htmlspecialchars($coupon['tier_name']); ?>
+                                    </span>
+                                </div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div style="font-size: 1.5rem; font-weight: bold; color: <?php echo $isActive ? '#16a34a' : ($isUsed ? '#dc2626' : '#f59e0b'); ?>;">
+                                    <?php echo (int) $coupon['discount_percent']; ?>% OFF
+                                </div>
+                                <?php if ($isActive): ?>
+                                    <span class="badge badge-paid" style="font-size: 0.7rem;">Active</span>
+                                <?php elseif ($isUsed): ?>
+                                    <span class="badge badge-unpaid" style="font-size: 0.7rem; background: #dc2626;">Used</span>
+                                <?php else: ?>
+                                    <span class="badge badge-pending" style="font-size: 0.7rem; background: #f59e0b;">Expired</span>
+                                <?php endif; ?>
+                            </div>
+                        </div>
+                        <hr style="border: none; border-top: 1px solid var(--neutral-200); margin: 0.5rem 0;">
+                        <div style="font-size: 0.85rem; color: var(--neutral-600);">
+                            <p><strong>Issued:</strong> <?php echo date('d M Y', strtotime($coupon['issued_at'])); ?></p>
+                            <p><strong>Expires:</strong> <?php echo date('d M Y', strtotime($coupon['expires_at'])); ?></p>
+                            <?php if ($isUsed && $coupon['used_in_order_id']): ?>
+                                <p><strong>Used on:</strong> Order #<?php echo (int) $coupon['used_in_order_id']; ?></p>
+                            <?php endif; ?>
+                        </div>
+                        <?php if ($isActive): ?>
+                            <div style="margin-top: 0.75rem; padding: 0.5rem; background: #f0fdf4; border-radius: 6px; font-size: 0.8rem; color: #166534; text-align: center;">
+                                &#127873; Available to use at checkout
+                            </div>
+                        <?php endif; ?>
+                    </div>
+                </div>
+            <?php endforeach; ?>
         </div>
     <?php endif; ?>
 </div>
@@ -350,7 +449,8 @@ document.addEventListener('DOMContentLoaded', function() {
     var tabs = document.querySelectorAll('.order-tab');
     var sections = {
         'active': document.getElementById('activeOrdersSection'),
-        'history': document.getElementById('historySection')
+        'history': document.getElementById('historySection'),
+        'coupons': document.getElementById('couponsSection')
     };
 
     tabs.forEach(function(tab) {
