@@ -3,14 +3,17 @@
  * Cart & Checkout Page
  * 
  * Displays all items in $_SESSION['cart'] with quantity controls.
- * Customer info form for name and phone.
+ * Customer info auto-filled from logged-in session.
  * On checkout: saves order to database and redirects to payment.php.
+ * Stores customer_id in orders table.
  */
 
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/customer_auth.php';
 
 startSession();
+requireCustomerLogin();
 
 $pageTitle = 'Cart - Smart Transaction System';
 
@@ -45,94 +48,121 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Place order (checkout)
     if (isset($_POST['checkout'])) {
-        $customerName  = trim($_POST['customer_name'] ?? '');
-        $customerPhone = trim($_POST['customer_phone'] ?? '');
+        // Check if cart is empty
+        if (empty($_SESSION['cart'])) {
+            $_SESSION['flash_message'] = 'Your cart is empty.';
+            $_SESSION['flash_type'] = 'warning';
+            header('Location: /smart-transaction/index.php');
+            exit;
+        }
 
-        if (empty($customerName)) {
-            $error = 'Please enter your name.';
-        } elseif (empty($_SESSION['cart'])) {
-            $error = 'Your cart is empty.';
-        } else {
-            try {
-                $pdo = getDBConnection();
+        // Validate session variables
+        $customerId = $_SESSION['customer_id'] ?? 0;
+        $customerName = $_SESSION['customer_name'] ?? '';
+        $customerPhone = $_SESSION['customer_phone'] ?? '';
 
-                // Fetch product details for cart items
-                $productIds = array_keys($_SESSION['cart']);
-                $placeholders = implode(',', array_fill(0, count($productIds), '?'));
-                $stmt = $pdo->prepare("SELECT id, name, price FROM products WHERE id IN ($placeholders) AND is_available = 1");
-                $stmt->execute($productIds);
-                $products = $stmt->fetchAll();
+        if ($customerId <= 0 || empty($customerName)) {
+            $_SESSION['flash_message'] = 'Session expired. Please log in again.';
+            $_SESSION['flash_type'] = 'danger';
+            header('Location: /smart-transaction/auth/login.php');
+            exit;
+        }
 
-                // Calculate total
-                $totalAmount = 0;
-                $orderItems = [];
-                foreach ($products as $product) {
-                    $pid = (int) $product['id'];
-                    $qty = $_SESSION['cart'][$pid];
-                    $subtotal = (float) $product['price'] * $qty;
-                    $totalAmount += $subtotal;
-                    $orderItems[] = [
-                        'product_id'   => $pid,
-                        'product_name' => $product['name'],
-                        'quantity'     => $qty,
-                        'unit_price'   => (float) $product['price'],
-                        'subtotal'     => $subtotal,
-                    ];
-                }
+        try {
+            $pdo = getDBConnection();
 
-                if (empty($orderItems)) {
-                    $error = 'No valid items in cart.';
-                } else {
-                    // Begin transaction
-                    $pdo->beginTransaction();
+            // Fetch product details for cart items
+            $productIds = array_keys($_SESSION['cart']);
+            $placeholders = implode(',', array_fill(0, count($productIds), '?'));
+            $stmt = $pdo->prepare("SELECT id, name, price FROM products WHERE id IN ($placeholders) AND is_available = 1");
+            $stmt->execute($productIds);
+            $products = $stmt->fetchAll();
 
-                    // Insert order
-                    $orderStmt = $pdo->prepare('INSERT INTO orders (customer_name, customer_phone, total_amount, status, payment_status) VALUES (:name, :phone, :total, :status, :payment_status)');
-                    $orderStmt->execute([
-                        ':name'           => $customerName,
-                        ':phone'          => $customerPhone,
-                        ':total'          => $totalAmount,
-                        ':status'         => 'pending',
-                        ':payment_status' => 'unpaid',
-                    ]);
-                    $orderId = (int) $pdo->lastInsertId();
-
-                    // Insert order items
-                    $itemStmt = $pdo->prepare('INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, subtotal) VALUES (:order_id, :product_id, :product_name, :quantity, :unit_price, :subtotal)');
-                    foreach ($orderItems as $item) {
-                        $itemStmt->execute([
-                            ':order_id'     => $orderId,
-                            ':product_id'   => $item['product_id'],
-                            ':product_name' => $item['product_name'],
-                            ':quantity'     => $item['quantity'],
-                            ':unit_price'   => $item['unit_price'],
-                            ':subtotal'     => $item['subtotal'],
-                        ]);
-                    }
-
-                    // Log order status
-                    $logStmt = $pdo->prepare('INSERT INTO order_status_logs (order_id, old_status, new_status, changed_by) VALUES (:order_id, NULL, :new_status, :changed_by)');
-                    $logStmt->execute([
-                        ':order_id'   => $orderId,
-                        ':new_status' => 'pending',
-                        ':changed_by' => 'System',
-                    ]);
-
-                    $pdo->commit();
-
-                    // Clear cart and store order ID in session for payment
-                    $_SESSION['cart'] = [];
-                    $_SESSION['last_order_id'] = $orderId;
-
-                    header('Location: /smart-transaction/payment.php?order_id=' . $orderId);
-                    exit;
-                }
-            } catch (PDOException $e) {
-                if (isset($pdo) && $pdo->inTransaction()) {
-                    $pdo->rollBack();
-                }
-                $error = 'An error occurred while placing your order. Please try again.';
+            // Calculate total and build order items
+            $totalAmount = 0;
+            $orderItems = [];
+            foreach ($products as $product) {
+                $pid = (int) $product['id'];
+                $qty = (int) ($_SESSION['cart'][$pid] ?? 0);
+                if ($qty <= 0) continue;
+                $unitPrice = (float) $product['price'];
+                $subtotal = $unitPrice * $qty;
+                $totalAmount += $subtotal;
+                $orderItems[] = [
+                    'product_id'   => $pid,
+                    'product_name' => $product['name'],
+                    'quantity'     => $qty,
+                    'unit_price'   => $unitPrice,
+                    'subtotal'     => $subtotal,
+                ];
             }
+
+            if (empty($orderItems)) {
+                $_SESSION['flash_message'] = 'No valid items in cart.';
+                $_SESSION['flash_type'] = 'warning';
+                header('Location: /smart-transaction/cart.php');
+                exit;
+            }
+
+            // Begin transaction
+            $pdo->beginTransaction();
+
+            // Insert order
+            $orderStmt = $pdo->prepare("
+                INSERT INTO orders 
+                (customer_id, customer_name, customer_phone, total_amount, status, payment_status, created_at, updated_at) 
+                VALUES 
+                (:customer_id, :customer_name, :customer_phone, :total_amount, 'pending', 'unpaid', NOW(), NOW())
+            ");
+            $orderStmt->execute([
+                ':customer_id'    => $_SESSION['customer_id'] ?? null,
+                ':customer_name'  => $_SESSION['customer_name'] ?? '',
+                ':customer_phone' => $_SESSION['customer_phone'] ?? '',
+                ':total_amount'   => $totalAmount,
+            ]);
+            $orderId = (int) $pdo->lastInsertId();
+
+            // Insert order items
+            $itemStmt = $pdo->prepare('INSERT INTO order_items (order_id, product_id, product_name, quantity, unit_price, subtotal) VALUES (:order_id, :product_id, :product_name, :quantity, :unit_price, :subtotal)');
+            foreach ($orderItems as $item) {
+                $itemStmt->execute([
+                    ':order_id'     => $orderId,
+                    ':product_id'   => $item['product_id'],
+                    ':product_name' => $item['product_name'],
+                    ':quantity'     => $item['quantity'],
+                    ':unit_price'   => $item['unit_price'],
+                    ':subtotal'     => $item['subtotal'],
+                ]);
+            }
+
+            // Log order status
+            $logStmt = $pdo->prepare('INSERT INTO order_status_logs (order_id, old_status, new_status, changed_by) VALUES (:order_id, :old_status, :new_status, :changed_by)');
+            $logStmt->execute([
+                ':order_id'   => $orderId,
+                ':old_status' => null,
+                ':new_status' => 'pending',
+                ':changed_by' => 'System',
+            ]);
+
+            $pdo->commit();
+
+            // Clear cart and store order ID in session for payment
+            $_SESSION['cart'] = [];
+            $_SESSION['last_order_id'] = $orderId;
+
+            header('Location: /smart-transaction/payment.php?order_id=' . $orderId);
+            exit;
+
+        } catch (PDOException $e) {
+            if (isset($pdo) && $pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            // Log the actual error for debugging
+            error_log('Order placement error: ' . $e->getMessage());
+            $_SESSION['flash_message'] = 'Order failed: ' . $e->getMessage();
+            $_SESSION['flash_type'] = 'danger';
+            header('Location: /smart-transaction/cart.php');
+            exit;
         }
     }
 }
@@ -237,17 +267,18 @@ include __DIR__ . '/includes/header.php';
                     </div>
                 </div>
 
-                <form method="POST" action="" id="checkoutForm" data-validate>
+                <form method="POST" action="" id="checkoutForm">
+                    <!-- Customer info auto-filled from session -->
                     <div class="form-group">
-                        <label for="customer_name" class="form-label">Full Name *</label>
-                        <input type="text" id="customer_name" name="customer_name" class="form-input" required
-                               placeholder="Enter your name">
+                        <label class="form-label">Customer</label>
+                        <p style="padding: 0.5rem 0; color: var(--neutral-700);">
+                            <strong><?php echo htmlspecialchars($_SESSION['customer_name']); ?></strong>
+                            <?php if (!empty($_SESSION['customer_phone'])): ?>
+                                <br><small class="text-muted"><?php echo htmlspecialchars($_SESSION['customer_phone']); ?></small>
+                            <?php endif; ?>
+                        </p>
                     </div>
-                    <div class="form-group">
-                        <label for="customer_phone" class="form-label">Phone Number</label>
-                        <input type="text" id="customer_phone" name="customer_phone" class="form-input"
-                               placeholder="e.g. 012-3456789">
-                    </div>
+
                     <button type="submit" name="checkout" value="1" class="btn btn-primary btn-block btn-lg">
                         Proceed to Payment
                     </button>

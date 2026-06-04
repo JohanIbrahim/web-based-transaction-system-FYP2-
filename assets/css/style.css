@@ -1210,3 +1210,28 @@ tbody tr:hover {
         grid-template-columns: repeat(2, 1fr);
     }
 }
+
+/* ============================================================
+   Role Badges (Admin / Staff)
+   ============================================================ */
+.role-badge {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+}
+
+.role-badge.role-admin {
+    background-color: #16a34a;
+    color: #ffffff;
+}
+
+.role-badge.role-staff {
+    background-color: #0284c7;
+    color: #ffffff;
+}

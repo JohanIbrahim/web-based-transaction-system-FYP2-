@@ -12,9 +12,10 @@
 
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/admin_auth.php';
 
 startSession();
-requireRole(['admin', 'staff']);
+requireAdminLogin();
 
 $pageTitle = 'Order Management - Admin';
 
@@ -130,6 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
+            error_log('Admin order action error: ' . $e->getMessage());
             $_SESSION['flash_message'] = 'Error: ' . $e->getMessage();
             $_SESSION['flash_type'] = 'danger';
         }
@@ -249,7 +251,9 @@ include __DIR__ . '/../includes/header.php';
                                                     endif;
                                                 endforeach; 
                                                 ?>
-                                                <option value="cancelled">Cancel Order</option>
+                                                <?php if (isAdmin()): ?>
+                                                    <option value="cancelled">Cancel Order</option>
+                                                <?php endif; ?>
                                             </select>
                                         </form>
                                     <?php endif; ?>

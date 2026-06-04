@@ -52,13 +52,15 @@ CREATE TABLE products (
 -- ------------------------------------------------------------
 CREATE TABLE orders (
     id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT DEFAULT NULL,
     customer_name VARCHAR(100) NOT NULL,
     customer_phone VARCHAR(20) DEFAULT NULL,
     total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     status ENUM('pending','preparing','ready','completed','cancelled') NOT NULL DEFAULT 'pending',
     payment_status ENUM('unpaid','paid') NOT NULL DEFAULT 'unpaid',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (customer_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ------------------------------------------------------------
@@ -136,6 +138,19 @@ INSERT INTO users (name, email, phone, password_hash, role) VALUES
 -- All above users have password: password
 -- The hash is the well-known bcrypt hash of "password" from Laravel's default hash.
 -- If it doesn't work on your system, run setup.php to re-hash.
+
+-- ------------------------------------------------------------
+-- Test Customer
+-- Email: customer@smarttransaction.com
+-- Password: customer123
+-- ------------------------------------------------------------
+INSERT INTO users (name, email, phone, password_hash, role) VALUES
+('Test Customer', 'customer@smarttransaction.com', '0111234567', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'customer');
+-- NOTE: The hash above is for 'password', not 'customer123'.
+-- After importing, run the following PHP script to update the hash:
+--   php -r "echo password_hash('customer123', PASSWORD_DEFAULT);"
+-- Then UPDATE users SET password_hash = '<new_hash>' WHERE email = 'customer@smarttransaction.com';
+-- OR use the setup.php script to re-hash all passwords.
 
 -- ------------------------------------------------------------
 -- Categories (5)

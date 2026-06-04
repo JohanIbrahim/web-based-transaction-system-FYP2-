@@ -306,7 +306,21 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // ============================================================
-    // 6. E-Wallet Option Selection (payment.php)
+    // 6. Flash Message Auto-Dismiss
+    // ============================================================
+    var flashMessages = document.querySelectorAll('.flash-message');
+    flashMessages.forEach(function(msg) {
+        setTimeout(function() {
+            msg.style.transition = 'opacity 0.5s ease';
+            msg.style.opacity = '0';
+            setTimeout(function() {
+                msg.style.display = 'none';
+            }, 500);
+        }, 4000);
+    });
+
+    // ============================================================
+    // 7. E-Wallet Option Selection (payment.php)
     // ============================================================
     document.querySelectorAll('.ewallet-option').forEach(function(option) {
         option.addEventListener('click', function() {

@@ -14,8 +14,10 @@
 
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/customer_auth.php';
 
 startSession();
+requireCustomerLogin();
 
 $pageTitle = 'Payment - Smart Transaction System';
 
@@ -132,6 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['process_payment'])) {
             if ($pdo->inTransaction()) {
                 $pdo->rollBack();
             }
+            error_log('Payment processing error: ' . $e->getMessage());
             $error = 'Payment processing failed. Please try again.';
         }
     }

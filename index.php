@@ -1,15 +1,37 @@
 <?php
 /**
- * Customer Menu Browsing Page
+ * Root Entry Point
  * 
- * Displays all available products grouped by category with category filter tabs,
- * search bar, and add-to-cart functionality. Cart count shown in navbar.
+ * Redirects users based on login status:
+ * - Not logged in → auth/login.php
+ * - Customer logged in → menu page (this file shows menu)
+ * - Admin/Staff logged in → their respective dashboard
  */
 
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/customer_auth.php';
 
 startSession();
+
+// If admin/staff is already logged in, go to their panel
+if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
+    if (isset($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'admin') {
+        header('Location: /smart-transaction/admin/dashboard.php');
+    } else {
+        header('Location: /smart-transaction/admin/orders.php');
+    }
+    exit();
+}
+
+// If customer is logged in, show the menu
+if (isCustomerLoggedIn()) {
+    // Continue to show the menu below
+} else {
+    // Not logged in — go to login page
+    header('Location: /smart-transaction/auth/login.php');
+    exit();
+}
 
 $pageTitle = 'Menu - Smart Transaction System';
 

@@ -9,8 +9,10 @@
 
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/db.php';
+require_once __DIR__ . '/includes/customer_auth.php';
 
 startSession();
+requireCustomerLogin();
 
 $pageTitle = 'Receipt - Smart Transaction System';
 
@@ -79,7 +81,7 @@ include __DIR__ . '/includes/header.php';
                     </p>
                 </div>
                 <div class="d-flex gap-1 flex-wrap" style="justify-content: center; margin-top: var(--spacing-lg);">
-                    <a href="/smart-transaction/tracking.php?order_id=<?php echo (int) $order['id']; ?>" class="btn btn-primary">Track My Order</a>
+                    <a href="/smart-transaction/transaction-history.php" class="btn btn-primary">My Orders</a>
                     <a href="/smart-transaction/index.php" class="btn btn-outline">&larr; Back to Menu</a>
                 </div>
             </div>
@@ -88,7 +90,7 @@ include __DIR__ . '/includes/header.php';
         <!-- Paid Order — Show full receipt -->
         <div class="no-print mb-3 d-flex gap-1 flex-wrap">
             <a href="/smart-transaction/index.php" class="btn btn-outline">&larr; Back to Menu</a>
-            <a href="/smart-transaction/tracking.php?order_id=<?php echo (int) $order['id']; ?>" class="btn btn-primary">Track My Order</a>
+            <a href="/smart-transaction/transaction-history.php" class="btn btn-primary">My Orders</a>
             <button id="printReceipt" class="btn btn-secondary">&#128424; Print / Download</button>
         </div>
 
