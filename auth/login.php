@@ -1,477 +1,213 @@
 <?php
 /**
- * Unified Login Page
+ * Login Page — Smart Transaction
  * 
- * Single login page for ALL roles: customer, staff, admin.
- * Detects role from users table and sets appropriate session variables.
- * Redirects to role-appropriate dashboard after login.
+ * Two-panel layout: left brand panel, right form panel.
+ * Handles both customer and admin/staff login.
  */
-
-ob_start();
 
 require_once __DIR__ . '/../includes/session.php';
 require_once __DIR__ . '/../includes/db.php';
+require_once __DIR__ . '/../includes/customer_auth.php';
 
 startSession();
 
-$pageTitle = 'Log In - Smart Transaction System';
-
-$error = '';
-$rememberedEmail = '';
-
-// Check for Remember Me cookie
-if (isset($_COOKIE['customer_remember_email'])) {
-    $rememberedEmail = $_COOKIE['customer_remember_email'];
-}
-
-// If already logged in as customer, redirect to menu
+// If already logged in, redirect
 if (isset($_SESSION['customer_logged_in']) && $_SESSION['customer_logged_in'] === true) {
     header('Location: /smart-transaction/index.php');
     exit;
 }
-
-// If already logged in as admin/staff, redirect accordingly
 if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
-    if (isset($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'admin') {
-        header('Location: /smart-transaction/admin/dashboard.php');
-    } else {
-        header('Location: /smart-transaction/admin/orders.php');
-    }
+    header('Location: /smart-transaction/admin/dashboard.php');
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['login'])) {
-    $email    = strtolower(trim($_POST['email'] ?? ''));
+$error = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $email    = trim($_POST['email'] ?? '');
     $password = $_POST['password'] ?? '';
-    $remember = isset($_POST['remember']);
 
     if (empty($email) || empty($password)) {
-        $error = 'Invalid email or password.';
+        $error = 'Please enter both email and password.';
     } else {
         try {
             $pdo = getDBConnection();
-            // Query all users regardless of role
-            $stmt = $pdo->prepare('SELECT id, name, email, phone, password_hash, role FROM users WHERE email = :email LIMIT 1');
+
+            // Check users table (admin/staff/customer)
+            $stmt = $pdo->prepare('SELECT id, name, email, password_hash, role, phone FROM users WHERE email = :email LIMIT 1');
             $stmt->execute([':email' => $email]);
             $user = $stmt->fetch();
 
             if ($user && password_verify($password, $user['password_hash'])) {
-                // Regenerate session ID to prevent session fixation
-                session_regenerate_id(true);
-
-                // Handle Remember Me
-                if ($remember) {
-                    setcookie('customer_remember_email', $email, time() + (86400 * 7), '/', '', false, true);
-                } else {
-                    if (isset($_COOKIE['customer_remember_email'])) {
-                        setcookie('customer_remember_email', '', time() - 3600, '/');
-                    }
-                }
-
-                // Set session variables based on role
-                if ($user['role'] === 'customer') {
-                    $_SESSION['customer_id']         = (int) $user['id'];
-                    $_SESSION['customer_name']       = $user['name'];
-                    $_SESSION['customer_email']      = $user['email'];
-                    $_SESSION['customer_phone']      = $user['phone'];
-                    $_SESSION['customer_logged_in']  = true;
-
-                    header('Location: /smart-transaction/index.php');
-                    exit;
-                } elseif ($user['role'] === 'staff') {
-                    $_SESSION['admin_id']            = (int) $user['id'];
-                    $_SESSION['admin_name']          = $user['name'];
-                    $_SESSION['admin_email']         = $user['email'];
-                    $_SESSION['admin_role']          = 'staff';
-                    $_SESSION['admin_logged_in']     = true;
-                    $_SESSION['user_id']             = (int) $user['id'];
-                    $_SESSION['user_name']           = $user['name'];
-                    $_SESSION['user_email']          = $user['email'];
-                    $_SESSION['role']                = 'staff';
-
-                    header('Location: /smart-transaction/admin/orders.php');
-                    exit;
-                } elseif ($user['role'] === 'admin') {
-                    $_SESSION['admin_id']            = (int) $user['id'];
-                    $_SESSION['admin_name']          = $user['name'];
-                    $_SESSION['admin_email']         = $user['email'];
-                    $_SESSION['admin_role']          = 'admin';
-                    $_SESSION['admin_logged_in']     = true;
-                    $_SESSION['user_id']             = (int) $user['id'];
-                    $_SESSION['user_name']           = $user['name'];
-                    $_SESSION['user_email']          = $user['email'];
-                    $_SESSION['role']                = 'admin';
+                if (in_array($user['role'], ['admin', 'staff'])) {
+                    // Admin/Staff login
+                    $_SESSION['admin_logged_in'] = true;
+                    $_SESSION['user_id']         = (int) $user['id'];
+                    $_SESSION['user_name']       = $user['name'];
+                    $_SESSION['user_email']      = $user['email'];
+                    $_SESSION['role']            = $user['role'];
+                    $_SESSION['admin_role']      = $user['role'];
 
                     header('Location: /smart-transaction/admin/dashboard.php');
                     exit;
                 } else {
-                    $error = 'Invalid account type.';
+                    // Customer login
+                    $_SESSION['customer_logged_in'] = true;
+                    $_SESSION['customer_id']        = (int) $user['id'];
+                    $_SESSION['customer_name']      = $user['name'];
+                    $_SESSION['customer_email']     = $user['email'];
+                    $_SESSION['customer_phone']     = $user['phone'] ?? '';
+
+                    header('Location: /smart-transaction/index.php');
+                    exit;
                 }
-            } else {
-                $error = 'Invalid email or password.';
             }
+
+            $error = 'Invalid email or password.';
         } catch (PDOException $e) {
-            $error = 'An error occurred. Please try again.';
+            $error = 'Login failed. Please try again later.';
         }
     }
 }
+
+$pageTitle = 'Login — Smart Transaction';
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo $pageTitle; ?></title>
     <link rel="stylesheet" href="/smart-transaction/assets/css/style.css">
-    <style>
-        /* Clean login page - no navbar, no header menu */
-        body {
-            background: #f7f6f2;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            margin: 0;
-            padding: 1rem;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-        }
-
-        .login-wrapper {
-            width: 100%;
-            max-width: 420px;
-        }
-
-        .login-card {
-            background: #fff;
-            border-radius: 12px;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.08);
-            padding: 2.5rem 2rem;
-        }
-
-        .login-logo {
-            text-align: center;
-            margin-bottom: 1.5rem;
-        }
-
-        .login-logo .brand-icon {
-            font-size: 2.5rem;
-            display: block;
-            margin-bottom: 0.5rem;
-        }
-
-        .login-logo h2 {
-            color: #01696f;
-            font-size: 1.5rem;
-            margin: 0 0 0.25rem 0;
-        }
-
-        .login-logo p {
-            color: #78716c;
-            font-size: 0.875rem;
-            margin: 0;
-        }
-
-        .form-group {
-            margin-bottom: 1rem;
-        }
-
-        .form-label {
-            display: block;
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: #44403c;
-            margin-bottom: 0.25rem;
-        }
-
-        .form-input {
-            width: 100%;
-            padding: 0.625rem 0.875rem;
-            font-size: 1rem;
-            color: #292524;
-            background: #fff;
-            border: 1px solid #d6d3d1;
-            border-radius: 8px;
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
-            box-sizing: border-box;
-        }
-
-        .form-input:focus {
-            outline: none;
-            border-color: #01696f;
-            box-shadow: 0 0 0 3px rgba(1, 105, 111, 0.15);
-        }
-
-        .password-wrapper {
-            position: relative;
-        }
-
-        .password-wrapper .form-input {
-            padding-right: 2.5rem;
-        }
-
-        .toggle-password {
-            position: absolute;
-            right: 0.75rem;
-            top: 50%;
-            transform: translateY(-50%);
-            background: none;
-            border: none;
-            cursor: pointer;
-            font-size: 1.1rem;
-            color: #a8a29e;
-            padding: 0;
-            line-height: 1;
-        }
-
-        .toggle-password:hover {
-            color: #57534e;
-        }
-
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .checkbox-group input[type="checkbox"] {
-            width: 16px;
-            height: 16px;
-            cursor: pointer;
-            accent-color: #01696f;
-        }
-
-        .checkbox-group label {
-            font-size: 0.875rem;
-            cursor: pointer;
-            color: #57534e;
-            margin: 0;
-        }
-
-        .btn {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0.625rem 1.25rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-            border: 1px solid transparent;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            text-decoration: none;
-        }
-
-        .btn-primary {
-            background: #01696f;
-            color: #fff;
-            border-color: #01696f;
-        }
-
-        .btn-primary:hover {
-            background: #014d52;
-            border-color: #014d52;
-        }
-
-        .btn-block {
-            display: flex;
-            width: 100%;
-        }
-
-        .btn-lg {
-            padding: 0.75rem 1.5rem;
-            font-size: 1rem;
-        }
-
-        .alert {
-            padding: 0.75rem 1rem;
-            border-radius: 8px;
-            margin-bottom: 1rem;
-            font-size: 0.875rem;
-            border: 1px solid transparent;
-        }
-
-        .alert-danger {
-            background: #fee2e2;
-            color: #991b1b;
-            border-color: #fecaca;
-        }
-
-        .alert-success {
-            background: #dcfce7;
-            color: #166534;
-            border-color: #bbf7d0;
-        }
-
-        .alert-info {
-            background: #e0f2fe;
-            color: #0c4a6e;
-            border-color: #bae6fd;
-        }
-
-        .divider {
-            border: none;
-            border-top: 1px solid #e7e5e4;
-            margin: 1.25rem 0;
-        }
-
-        .login-footer {
-            text-align: center;
-            font-size: 0.875rem;
-            color: #78716c;
-            margin-top: 1rem;
-        }
-
-        .login-footer a {
-            color: #01696f;
-            text-decoration: none;
-        }
-
-        .login-footer a:hover {
-            text-decoration: underline;
-        }
-
-        .demo-credentials {
-            margin-top: 1.25rem;
-            padding: 0.75rem 1rem;
-            background: #f5f5f4;
-            border-radius: 8px;
-            font-size: 0.75rem;
-            color: #57534e;
-            border: 1px solid #e7e5e4;
-        }
-
-        .demo-credentials strong {
-            display: block;
-            margin-bottom: 0.35rem;
-            color: #44403c;
-        }
-
-        .demo-credentials code {
-            display: block;
-            line-height: 1.6;
-        }
-
-        .site-footer {
-            text-align: center;
-            margin-top: 1.5rem;
-            font-size: 0.75rem;
-            color: #a8a29e;
-        }
-
-        /* Flash message auto-dismiss */
-        .flash-message {
-            animation: flashFade 4s forwards;
-        }
-
-        @keyframes flashFade {
-            0%, 70% { opacity: 1; }
-            100% { opacity: 0; display: none; }
-        }
-
-        @media (max-width: 480px) {
-            .login-card {
-                padding: 1.5rem 1.25rem;
-            }
-        }
-    </style>
+    <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
-
-<div class="login-wrapper">
-    <div class="login-card">
-        <div class="login-logo">
-            <span class="brand-icon">&#9749;</span>
-            <h2>Smart Transaction System</h2>
-            <p>Welcome back! Please log in to continue.</p>
+<div class="auth-page">
+    <!-- Left Panel — Branding -->
+    <div class="auth-left">
+        <div class="auth-logo">
+            <a href="/smart-transaction/index.php" class="qs-logo qs-logo-lg qs-logo-white">
+                <?php
+                $logoFile = __DIR__ . '/../uploads/logo.png';
+                if (file_exists($logoFile)):
+                ?>
+                    <img src="/smart-transaction/uploads/logo.png?t=<?php echo filemtime($logoFile); ?>" alt="Smart Transaction" style="height: 40px; width: auto; filter: brightness(0) invert(1);">
+                <?php else: ?>
+                <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="50" cy="50" r="45" fill="currentColor" opacity="0.12"/>
+                    <path d="M35 55c0-8 6-15 15-15s15 7 15 15" stroke="currentColor" stroke-width="3" fill="none"/>
+                    <path d="M30 55h40" stroke="currentColor" stroke-width="3"/>
+                    <path d="M45 40l-5-10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                    <path d="M55 40l5-10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                    <path d="M40 65c0 5 4 10 10 10s10-5 10-10" stroke="currentColor" stroke-width="2.5" fill="none"/>
+                    <circle cx="42" cy="52" r="2" fill="currentColor"/>
+                    <circle cx="58" cy="52" r="2" fill="currentColor"/>
+                </svg>
+                Smart Transaction
+                <?php endif; ?>
+            </a>
         </div>
-
-        <?php if (isset($_SESSION['flash_message'])): ?>
-            <div class="alert alert-<?php echo $_SESSION['flash_type'] ?? 'info'; ?> flash-message">
-                <?php echo htmlspecialchars($_SESSION['flash_message']); ?>
+        <p class="auth-tagline">Smart. Simple. Seamless.</p>
+        <div class="auth-benefits">
+            <div class="auth-benefit">
+                <span class="benefit-icon">&#9749;</span>
+                <span>Freshly prepared food & beverages</span>
             </div>
-            <?php unset($_SESSION['flash_message'], $_SESSION['flash_type']); ?>
-        <?php endif; ?>
-
-        <?php if ($error): ?>
-            <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
-        <?php endif; ?>
-
-        <form method="POST" action="" novalidate>
-            <!-- Email -->
-            <div class="form-group">
-                <label for="email" class="form-label">Email Address</label>
-                <input type="email" id="email" name="email" class="form-input"
-                       value="<?php echo htmlspecialchars($rememberedEmail); ?>"
-                       placeholder="you@example.com" required>
+            <div class="auth-benefit">
+                <span class="benefit-icon">&#128722;</span>
+                <span>Easy online ordering</span>
             </div>
-
-            <!-- Password with show/hide toggle -->
-            <div class="form-group">
-                <label for="password" class="form-label">Password</label>
-                <div class="password-wrapper">
-                    <input type="password" id="password" name="password" class="form-input"
-                           placeholder="Enter your password" required>
-                    <button type="button" class="toggle-password" onclick="togglePassword()" aria-label="Toggle password visibility">&#128065;</button>
-                </div>
+            <div class="auth-benefit">
+                <span class="benefit-icon">&#127873;</span>
+                <span>Exclusive coupons & promotions</span>
             </div>
-
-            <!-- Remember Me -->
-            <div class="checkbox-group">
-                <input type="checkbox" id="remember" name="remember" value="1"
-                       <?php echo $rememberedEmail ? 'checked' : ''; ?>>
-                <label for="remember">Remember Me</label>
+            <div class="auth-benefit">
+                <span class="benefit-icon">&#128179;</span>
+                <span>Secure payment options</span>
             </div>
-
-            <button type="submit" name="login" value="1" class="btn btn-primary btn-block btn-lg">
-                Login
-            </button>
-        </form>
-
-        <hr class="divider">
-
-        <div class="login-footer">
-            Don't have an account? <a href="/smart-transaction/auth/signup.php">Sign up here</a>
-        </div>
-
-        <!-- Demo Credentials -->
-        <div class="demo-credentials">
-            <strong>Demo Login Credentials</strong>
-            <code>Admin   : admin@smarttransaction.com</code>
-            <code>Staff   : staff@smarttransaction.com</code>
-            <code>Customer: customer@smarttransaction.com</code>
-            <code>Password: Admin@1234 / Staff@1234 / customer123</code>
         </div>
     </div>
 
-    <div class="site-footer">
-        Smart Transaction System &copy; 2026
+    <!-- Right Panel — Login Form -->
+    <div class="auth-right">
+        <div class="auth-form-container">
+            <div class="auth-logo-mobile">
+                <a href="/smart-transaction/index.php" class="qs-logo qs-logo-lg">
+                    <?php
+                    $logoFile = __DIR__ . '/../uploads/logo.png';
+                    if (file_exists($logoFile)):
+                    ?>
+                        <img src="/smart-transaction/uploads/logo.png?t=<?php echo filemtime($logoFile); ?>" alt="Smart Transaction" style="height: 36px; width: auto;">
+                    <?php else: ?>
+                    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle cx="50" cy="50" r="45" fill="currentColor" opacity="0.12"/>
+                        <path d="M35 55c0-8 6-15 15-15s15 7 15 15" stroke="currentColor" stroke-width="3" fill="none"/>
+                        <path d="M30 55h40" stroke="currentColor" stroke-width="3"/>
+                        <path d="M45 40l-5-10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                        <path d="M55 40l5-10" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                        <path d="M40 65c0 5 4 10 10 10s10-5 10-10" stroke="currentColor" stroke-width="2.5" fill="none"/>
+                        <circle cx="42" cy="52" r="2" fill="currentColor"/>
+                        <circle cx="58" cy="52" r="2" fill="currentColor"/>
+                    </svg>
+                    Smart Transaction
+                    <?php endif; ?>
+                </a>
+            </div>
+
+            <h1 class="auth-title">Welcome Back</h1>
+            <p class="auth-subtitle">Sign in to your account to continue</p>
+
+            <?php if ($error): ?>
+                <div class="alert alert-danger">
+                    <span class="alert-icon">&#10060;</span>
+                    <span><?php echo htmlspecialchars($error); ?></span>
+                </div>
+            <?php endif; ?>
+
+            <form method="POST" action="">
+                <div class="form-group">
+                    <label class="form-label" for="email">Email Address <span class="required">*</span></label>
+                    <input type="email" id="email" name="email" class="form-input" 
+                           placeholder="you@example.com" required
+                           value="<?php echo htmlspecialchars($_POST['email'] ?? ''); ?>">
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="password">Password <span class="required">*</span></label>
+                    <input type="password" id="password" name="password" class="form-input" 
+                           placeholder="Enter your password" required>
+                </div>
+
+                <button type="submit" class="btn btn-primary btn-block btn-lg">
+                    Sign In <i data-lucide="arrow-right" style="width:18px;height:18px;"></i>
+                </button>
+            </form>
+
+            <p class="mt-3 text-center" style="font-size: 0.9rem; color: var(--color-text-muted);">
+                Don't have an account? <a href="/smart-transaction/auth/signup.php">Sign Up</a>
+            </p>
+
+            <!-- Demo Credentials -->
+            <div class="demo-credentials">
+                <p class="demo-credentials-title">Demo Login Credentials</p>
+                <div class="demo-credentials-grid">
+                    <div><strong>Admin</strong> : admin@smarttransaction.com</div>
+                    <div><strong>Staff</strong> : staff@smarttransaction.com</div>
+                    <div><strong>Customer</strong> : customer@smarttransaction.com</div>
+                    <div><strong>Password</strong> : password</div>
+                </div>
+            </div>
+        </div>
     </div>
 </div>
 
 <script>
-function togglePassword() {
-    var pwd = document.getElementById('password');
-    var btn = document.querySelector('.toggle-password');
-    if (pwd.type === 'password') {
-        pwd.type = 'text';
-        btn.innerHTML = '&#128064;';
-    } else {
-        pwd.type = 'password';
-        btn.innerHTML = '&#128065;';
-    }
-}
-
-// Auto-dismiss flash messages
 document.addEventListener('DOMContentLoaded', function() {
-    var flash = document.querySelector('.flash-message');
-    if (flash) {
-        setTimeout(function() {
-            flash.style.display = 'none';
-        }, 4000);
+    if (typeof lucide !== 'undefined') {
+        lucide.createIcons();
     }
 });
 </script>
-
 </body>
 </html>

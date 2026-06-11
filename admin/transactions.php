@@ -13,7 +13,7 @@ require_once __DIR__ . '/../includes/admin_auth.php';
 startSession();
 requireAdminRole();
 
-$pageTitle = 'Transactions - Smart Transaction System';
+$pageTitle = 'Transactions — Smart Transaction';
 
 $transactions = [];
 $coupons = [];

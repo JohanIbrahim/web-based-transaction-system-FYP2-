@@ -1,6 +1,6 @@
 <?php
 /**
- * Digital Receipt Page
+ * Digital Receipt Page — Smart Transaction
  * 
  * Displays a printable receipt for a completed order.
  * Shows order details, items, payment info, and a track order button.
@@ -13,6 +13,7 @@ require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/customer_auth.php';
 require_once __DIR__ . '/includes/admin_auth.php';
+require_once __DIR__ . '/includes/promotion_helper.php';
 
 startSession();
 
@@ -22,7 +23,7 @@ if (!isCustomerLoggedIn() && !isAdminLoggedIn()) {
     exit;
 }
 
-$pageTitle = 'Receipt - Smart Transaction System';
+$pageTitle = 'Receipt — Smart Transaction';
 
 $orderId = isset($_GET['order_id']) ? (int) $_GET['order_id'] : 0;
 
@@ -64,10 +65,22 @@ try {
     // ============================================================
     // Subtotal = sum of all order_items (unit_price * quantity)
     $subtotal = 0;
+    $promoSavings = 0;
     foreach ($orderItems as $item) {
-        $subtotal += (float) $item['unit_price'] * (int) $item['quantity'];
+        $unitPrice = (float) $item['unit_price'];
+        $qty = (int) $item['quantity'];
+        $subtotal += $unitPrice * $qty;
+
+        // Check if product had active promotion at time of order
+        $promo = getProductPromo($pdo, $item['product_id']);
+        if ($promo) {
+            $discountedPrice = getDiscountedPrice($unitPrice, $promo['discount_percent']);
+            $promoSavings += round(($unitPrice - $discountedPrice) * $qty, 2);
+        }
     }
     $subtotal = round($subtotal, 2);
+    $promoSavings = round($promoSavings, 2);
+    $subtotalAfterPromos = $subtotal - $promoSavings;
 
     // Discount info from coupons table (if coupon_id exists on order)
     $discountPercent = 0;
@@ -82,14 +95,14 @@ try {
         if ($couponInfo) {
             $discountPercent = (float) $couponInfo['discount_percent'];
             $couponCode = $couponInfo['coupon_code'];
-            // Calculate discount from subtotal
-            $discountAmount = round($subtotal * ($discountPercent / 100), 2);
+            // Calculate discount from subtotal after promos
+            $discountAmount = round($subtotalAfterPromos * ($discountPercent / 100), 2);
         }
     }
 
     // Total from database (should match subtotal - discount)
     $totalFromDb = round((float) $order['total_amount'], 2);
-    $calculatedTotal = round($subtotal - $discountAmount, 2);
+    $calculatedTotal = round($subtotalAfterPromos - $discountAmount, 2);
 
     // Use database value as final, but show correct breakdown
     // If there's a mismatch, trust the database value
@@ -177,16 +190,28 @@ include __DIR__ . '/includes/header.php';
 
             <hr style="border: none; border-top: 1px dashed var(--neutral-300);">
 
-            <!-- Subtotal - ALWAYS shown -->
+            <!-- Items Subtotal - ALWAYS shown -->
             <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; font-size: 0.9rem;">
-                <span>Subtotal</span>
+                <span>Items Subtotal</span>
                 <span>RM <?php echo number_format($subtotal, 2); ?></span>
             </div>
 
-            <!-- Discount - ONLY shown if coupon was applied -->
+            <!-- Promotion Savings - ONLY shown if > 0 -->
+            <?php if ($promoSavings > 0): ?>
+            <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; font-size: 0.9rem; color: #16a34a;">
+                <span>Promotion Savings</span>
+                <span>- RM <?php echo number_format($promoSavings, 2); ?></span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; font-size: 0.9rem; border-top:1px dashed #e7e5e4;">
+                <span>Subtotal after Promotions</span>
+                <span>RM <?php echo number_format($subtotalAfterPromos, 2); ?></span>
+            </div>
+            <?php endif; ?>
+
+            <!-- Coupon Discount - ONLY shown if coupon was applied -->
             <?php if ($discountAmount > 0 && $couponCode): ?>
                 <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; font-size: 0.9rem; color: #16a34a;">
-                    <span>Discount (<?php echo (int) $discountPercent; ?>% off)</span>
+                    <span>Coupon Discount (<?php echo (int) $discountPercent; ?>% off)</span>
                     <span>- RM <?php echo number_format($discountAmount, 2); ?></span>
                 </div>
                 <div style="font-size: 0.8rem; color: var(--neutral-500); text-align: right; padding-bottom: 0.5rem;">

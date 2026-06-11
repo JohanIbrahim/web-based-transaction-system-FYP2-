@@ -18,6 +18,8 @@ CREATE TABLE users (
     email VARCHAR(100) NOT NULL UNIQUE,
     phone VARCHAR(20) DEFAULT NULL,
     password_hash VARCHAR(255) NOT NULL,
+    reset_token VARCHAR(64) DEFAULT NULL,
+    reset_token_expires DATETIME DEFAULT NULL,
     role ENUM('customer','staff','admin') NOT NULL DEFAULT 'customer',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

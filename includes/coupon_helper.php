@@ -112,18 +112,15 @@ function validateCoupon($pdo, $coupon_code, $customer_id, $order_total) {
         SELECT * FROM coupons 
         WHERE coupon_code = :code 
         AND customer_id = :customer_id
+        AND is_active = 1
+        AND is_used = 0
+        AND expires_at > NOW()
     ");
     $stmt->execute([':code' => trim(strtoupper($coupon_code)), ':customer_id' => $customer_id]);
     $coupon = $stmt->fetch(PDO::FETCH_ASSOC);
     
     if (!$coupon) {
-        return ['error' => 'Invalid coupon code. This coupon does not belong to your account.'];
-    }
-    if ($coupon['is_used']) {
-        return ['error' => 'This coupon has already been used.'];
-    }
-    if (strtotime($coupon['expires_at']) < time()) {
-        return ['error' => 'This coupon has expired.'];
+        return ['error' => 'Invalid coupon code. This coupon does not belong to your account or is no longer active.'];
     }
     
     $discount_amount = round($order_total * ($coupon['discount_percent'] / 100), 2);

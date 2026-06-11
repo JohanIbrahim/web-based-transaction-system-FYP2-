@@ -1,6 +1,6 @@
 <?php
 /**
- * Root Entry Point
+ * Root Entry Point — Smart Transaction Menu
  * 
  * Redirects users based on login status:
  * - Not logged in → auth/login.php
@@ -12,6 +12,7 @@ require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/customer_auth.php';
 require_once __DIR__ . '/includes/coupon_helper.php';
+require_once __DIR__ . '/includes/promotion_helper.php';
 
 startSession();
 
@@ -34,7 +35,7 @@ if (isCustomerLoggedIn()) {
     exit();
 }
 
-$pageTitle = 'Menu - Smart Transaction System';
+$pageTitle = 'Menu — Smart Transaction';
 
 // Fetch active coupons for notification banner
 $activeCouponBanner = null;
@@ -105,33 +106,68 @@ try {
     $error = 'Unable to load menu. Please try again later.';
 }
 
+// Get active promo products
+$promo_products = [];
+try {
+    $promo_products = getActivePromoProducts($pdo);
+} catch (Exception $e) {}
+
 include __DIR__ . '/includes/header.php';
 ?>
 
+<?php if (!empty($promo_products)): ?>
+    <?php
+    $shownPromos = [];
+    foreach ($promo_products as $pid => $promo):
+        if (in_array($promo['title'], $shownPromos)) continue;
+        $shownPromos[] = $promo['title'];
+        $typeLabel = $promo['type'] === 'day' ? 'Promo of the Day' : 'Promo of the Week';
+    ?>
+    <div class="promo-banner" data-promo-id="<?php echo md5($promo['title']); ?>">
+        <span>
+            &#128293; <strong><?php echo htmlspecialchars($typeLabel); ?>:</strong> 
+            "<?php echo htmlspecialchars($promo['title']); ?>" &mdash; 
+            <strong><?php echo (int)$promo['discount_percent']; ?>% OFF</strong> on selected items &mdash; Auto-applied!
+        </span>
+        <button type="button" class="promo-dismiss" onclick="dismissPromo(this)" style="background: none; border: none; color: #fff; font-size: 1.2rem; cursor: pointer; opacity: 0.8;">&times;</button>
+    </div>
+    <?php endforeach; ?>
+<?php endif; ?>
+
 <?php if ($addedProductId > 0): ?>
     <div class="alert alert-success">
-        Item added to cart! <a href="/smart-transaction/cart.php" class="btn btn-sm btn-primary ml-1">View Cart</a>
+        <span class="alert-icon">&#9989;</span>
+        <span>Item added to cart! <a href="/smart-transaction/cart.php" class="btn btn-sm btn-primary ml-1">View Cart</a></span>
     </div>
 <?php endif; ?>
 
 <?php if (isset($error)): ?>
-    <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
-<?php endif; ?>
-
-<?php if ($activeCouponBanner): ?>
-    <div class="alert alert-success" style="background: #dcfce7; border: 1px solid #bbf7d0; color: #166534; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-        <span>
-            &#127873; <strong>You have a coupon!</strong> 
-            Use code <code style="background: #bbf7d0; padding: 0.15rem 0.5rem; border-radius: 4px; font-weight: bold;"><?php echo htmlspecialchars($activeCouponBanner['coupon_code']); ?></code> 
-            for <strong><?php echo (int) $activeCouponBanner['discount_percent']; ?>% off</strong> your next order!
-        </span>
-        <a href="/smart-transaction/cart.php" class="btn btn-sm btn-primary">Use Now</a>
+    <div class="alert alert-danger">
+        <span class="alert-icon">&#10060;</span>
+        <span><?php echo htmlspecialchars($error); ?></span>
     </div>
 <?php endif; ?>
 
-<div class="page-header">
-    <h1>Our Menu</h1>
-    <p>Browse our selection of freshly prepared food and beverages</p>
+<?php if ($activeCouponBanner): ?>
+    <div class="alert alert-success">
+        <span class="alert-icon">&#127873;</span>
+        <span>
+            <strong>You have a coupon!</strong> 
+            Use code <code style="background: #bbf7d0; padding: 0.15rem 0.5rem; border-radius: 4px; font-weight: bold;"><?php echo htmlspecialchars($activeCouponBanner['coupon_code']); ?></code> 
+            for <strong><?php echo (int) $activeCouponBanner['discount_percent']; ?>% off</strong> your next order!
+        </span>
+        <a href="/smart-transaction/cart.php" class="btn btn-sm btn-primary" style="margin-left:auto;">Use Now</a>
+    </div>
+<?php endif; ?>
+
+<!-- Hero Section -->
+<div class="menu-hero">
+    <div class="menu-hero-content">
+        <h1>Good Food, Great Moments</h1>
+        <p class="tagline">Freshly prepared food & beverages — order now and enjoy!</p>
+        <a href="#menu" class="btn btn-primary">Browse Menu &darr;</a>
+    </div>
+    <div class="hero-decoration">&#9749;</div>
 </div>
 
 <!-- Search Bar -->
@@ -150,25 +186,33 @@ include __DIR__ . '/includes/header.php';
 </div>
 
 <?php if (empty($categories)): ?>
-    <div class="alert alert-info">No menu items available at the moment. Please check back later.</div>
+    <div class="empty-state">
+        <div class="empty-icon">&#127869;</div>
+        <h3>No menu items available</h3>
+        <p>Please check back later for our freshly prepared offerings.</p>
+    </div>
 <?php else: ?>
     <?php foreach ($categories as $category): ?>
         <?php $products = $productsByCategory[$category['id']] ?? []; ?>
         <?php if (empty($products)) continue; ?>
 
-        <section class="mb-4 category-section" data-category="<?php echo (int) $category['id']; ?>">
-            <h2 class="mb-2" style="color: var(--primary); font-size: 1.3rem;">
+        <section class="mb-4 category-section" data-category="<?php echo (int) $category['id']; ?>" id="menu">
+            <h2 class="mb-2" style="color: var(--color-primary); font-size: 1.3rem;">
                 <?php echo htmlspecialchars($category['name']); ?>
             </h2>
             <?php if ($category['description']): ?>
                 <p class="text-muted mb-2"><?php echo htmlspecialchars($category['description']); ?></p>
             <?php endif; ?>
 
-            <div class="grid grid-3 product-grid">
-                <?php foreach ($products as $product): ?>
-                    <div class="card product-card" data-name="<?php echo htmlspecialchars(strtolower($product['name'])); ?>">
-                        <div class="card-body">
-                            <div class="product-image-placeholder">
+            <div class="product-grid">
+                <?php foreach ($products as $product): 
+                    $promo = getProductPromo($pdo, $product['id']);
+                ?>
+                    <div class="product-card" data-name="<?php echo htmlspecialchars(strtolower($product['name'])); ?>">
+                        <div class="product-image">
+                            <?php if ($product['image_url']): ?>
+                                <img src="/smart-transaction/uploads/<?php echo htmlspecialchars($product['image_url']); ?>" alt="<?php echo htmlspecialchars($product['name']); ?>" style="width: 100%; height: 100%; object-fit: cover; position: absolute; top: 0; left: 0;">
+                            <?php else: ?>
                                 <?php
                                 $icons = [
                                     'Coffee' => '&#9749;',
@@ -179,22 +223,33 @@ include __DIR__ . '/includes/header.php';
                                 ];
                                 echo $icons[$category['name']] ?? '&#127869;';
                                 ?>
-                            </div>
+                            <?php endif; ?>
+                            <?php if ($promo): ?>
+                                <span class="product-badge promo">&#128293; -<?php echo (int)$promo['discount_percent']; ?>%</span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="product-body">
                             <h3 class="product-name"><?php echo htmlspecialchars($product['name']); ?></h3>
                             <p class="product-category-label"><?php echo htmlspecialchars($category['name']); ?></p>
                             <?php if ($product['description']): ?>
                                 <p class="product-description"><?php echo htmlspecialchars($product['description']); ?></p>
                             <?php endif; ?>
-                            <p class="product-price">RM <?php echo number_format((float) $product['price'], 2); ?></p>
+                            <?php if ($promo): 
+                                $discounted = getDiscountedPrice($product['price'], $promo['discount_percent']);
+                            ?>
+                                <p class="product-price">
+                                    <span class="original">RM <?php echo number_format((float) $product['price'], 2); ?></span>
+                                    RM <?php echo number_format($discounted, 2); ?>
+                                    <span class="promo-label">Promo auto-applied</span>
+                                </p>
+                            <?php else: ?>
+                                <p class="product-price">RM <?php echo number_format((float) $product['price'], 2); ?></p>
+                            <?php endif; ?>
                             <form method="POST" action="" class="add-to-cart-form">
                                 <input type="hidden" name="product_id" value="<?php echo (int) $product['id']; ?>">
-                                <div class="d-flex gap-1 align-center">
-                                    <input type="number" name="quantity" value="1" min="1" max="99"
-                                           class="form-input qty-input" style="width: 60px; text-align: center;">
-                                    <button type="submit" class="btn btn-primary btn-sm" style="flex: 1;">
-                                        Add to Cart
-                                    </button>
-                                </div>
+                                <input type="number" name="quantity" value="1" min="1" max="99"
+                                       class="form-input qty-input" style="width: 56px; text-align: center;">
+                                <button type="submit" class="add-btn">+ Add</button>
                             </form>
                         </div>
                     </div>
@@ -205,8 +260,26 @@ include __DIR__ . '/includes/header.php';
 <?php endif; ?>
 
 <script>
-// Category filter tabs
+function dismissPromo(btn) {
+    var banner = btn.closest('.promo-banner');
+    if (banner) {
+        var promoId = banner.getAttribute('data-promo-id');
+        try { sessionStorage.setItem('promo_dismissed_' + promoId, '1'); } catch(e) {}
+        banner.style.display = 'none';
+    }
+}
+
+// Check dismissed promos on load
 document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.promo-banner').forEach(function(banner) {
+        var promoId = banner.getAttribute('data-promo-id');
+        try {
+            if (sessionStorage.getItem('promo_dismissed_' + promoId) === '1') {
+                banner.style.display = 'none';
+            }
+        } catch(e) {}
+    });
+
     const tabs = document.querySelectorAll('.category-tab');
     const sections = document.querySelectorAll('.category-section');
     const searchInput = document.getElementById('menuSearch');

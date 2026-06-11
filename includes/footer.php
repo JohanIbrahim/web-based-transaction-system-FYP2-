@@ -1,6 +1,6 @@
 <?php
 /**
- * Footer Template
+ * Footer Template — Smart Transaction
  * 
  * Closes the <main> tag and renders the footer and scripts.
  */
@@ -9,7 +9,8 @@
 
 <footer class="footer">
     <div class="container">
-        <p>&copy; <?php echo date('Y'); ?> Smart Transaction System. All rights reserved.</p>
+        <p class="tagline">&#9749; Smart Transaction — Smart. Simple. Seamless.</p>
+        <p>&copy; <?php echo date('Y'); ?> Smart Transaction. All rights reserved.</p>
     </div>
 </footer>
 

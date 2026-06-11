@@ -1,35 +1,29 @@
 <?php
 /**
- * Unified Logout Page
+ * Logout Script — Smart Transaction
  * 
- * Handles logout for ALL roles: customer, staff, admin.
- * Clears appropriate session variables and redirects to login page.
+ * Destroys session and redirects to login page.
  */
 
 require_once __DIR__ . '/../includes/session.php';
-require_once __DIR__ . '/../includes/customer_auth.php';
 
 startSession();
 
-// Check if admin/staff is logged in
-if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in'] === true) {
-    // Clear admin/staff session variables
-    unset($_SESSION['admin_id']);
-    unset($_SESSION['admin_name']);
-    unset($_SESSION['admin_email']);
-    unset($_SESSION['admin_role']);
-    unset($_SESSION['admin_logged_in']);
-    unset($_SESSION['user_id']);
-    unset($_SESSION['user_name']);
-    unset($_SESSION['user_email']);
-    unset($_SESSION['role']);
-} else {
-    // Clear customer session variables
-    customerLogout();
+// Clear all session variables
+$_SESSION = [];
+
+// Destroy the session cookie
+if (ini_get('session.use_cookies')) {
+    $params = session_get_cookie_params();
+    setcookie(session_name(), '', time() - 42000,
+        $params['path'], $params['domain'],
+        $params['secure'], $params['httponly']
+    );
 }
 
-$_SESSION['flash_message'] = 'You have been logged out.';
-$_SESSION['flash_type'] = 'info';
+// Destroy the session
+session_destroy();
 
+// Redirect to login
 header('Location: /smart-transaction/auth/login.php');
 exit;

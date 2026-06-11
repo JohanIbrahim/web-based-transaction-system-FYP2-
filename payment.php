@@ -1,6 +1,6 @@
 <?php
 /**
- * Payment Page
+ * Payment Page — Smart Transaction
  * 
  * Shows order summary and payment method selection.
  * On submit: records payment, updates order, creates transaction record.
@@ -17,11 +17,12 @@
 require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/customer_auth.php';
+require_once __DIR__ . '/includes/promotion_helper.php';
 
 startSession();
 requireCustomerLogin();
 
-$pageTitle = 'Payment - Smart Transaction System';
+$pageTitle = 'Payment — Smart Transaction';
 
 $orderId = isset($_GET['order_id']) ? (int) $_GET['order_id'] : 0;
 
@@ -58,10 +59,22 @@ try {
     // CALCULATE FROM DATABASE
     // ============================================================
     $subtotal = 0;
+    $promoSavings = 0;
     foreach ($orderItems as $item) {
-        $subtotal += (float) $item['unit_price'] * (int) $item['quantity'];
+        $unitPrice = (float) $item['unit_price'];
+        $qty = (int) $item['quantity'];
+        $subtotal += $unitPrice * $qty;
+
+        // Check if product had active promotion at time of order
+        $promo = getProductPromo($pdo, $item['product_id']);
+        if ($promo) {
+            $discountedPrice = getDiscountedPrice($unitPrice, $promo['discount_percent']);
+            $promoSavings += round(($unitPrice - $discountedPrice) * $qty, 2);
+        }
     }
     $subtotal = round($subtotal, 2);
+    $promoSavings = round($promoSavings, 2);
+    $subtotalAfterPromos = $subtotal - $promoSavings;
 
     $discountPercent = 0;
     $couponCode = null;
@@ -75,7 +88,7 @@ try {
         if ($couponInfo) {
             $discountPercent = (float) $couponInfo['discount_percent'];
             $couponCode = $couponInfo['coupon_code'];
-            $discountAmount = round($subtotal * ($discountPercent / 100), 2);
+            $discountAmount = round($subtotalAfterPromos * ($discountPercent / 100), 2);
         }
     }
 
@@ -203,16 +216,28 @@ include __DIR__ . '/includes/header.php';
 
             <hr style="margin: 0.75rem 0; border: none; border-top: 1px solid var(--neutral-200);">
 
-            <!-- Subtotal -->
+            <!-- Items Subtotal -->
             <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; font-size: 0.9rem;">
-                <span>Subtotal</span>
+                <span>Items Subtotal</span>
                 <span>RM <?php echo number_format($subtotal, 2); ?></span>
             </div>
 
-            <!-- Discount (only if coupon applied) -->
+            <!-- Promotion Savings -->
+            <?php if ($promoSavings > 0): ?>
+            <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; font-size: 0.9rem; color: #16a34a;">
+                <span>Promotion Savings</span>
+                <span>- RM <?php echo number_format($promoSavings, 2); ?></span>
+            </div>
+            <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; font-size: 0.9rem; border-top:1px dashed #e7e5e4;">
+                <span>Subtotal after Promotions</span>
+                <span>RM <?php echo number_format($subtotalAfterPromos, 2); ?></span>
+            </div>
+            <?php endif; ?>
+
+            <!-- Coupon Discount -->
             <?php if ($discountAmount > 0 && $couponCode): ?>
                 <div style="display: flex; justify-content: space-between; padding: 0.25rem 0; font-size: 0.9rem; color: #16a34a;">
-                    <span>Discount (<?php echo (int) $discountPercent; ?>% off)</span>
+                    <span>Coupon Discount (<?php echo (int) $discountPercent; ?>% off)</span>
                     <span>- RM <?php echo number_format($discountAmount, 2); ?></span>
                 </div>
                 <div style="font-size: 0.8rem; color: var(--neutral-500); text-align: right; padding-bottom: 0.25rem;">

@@ -1,6 +1,6 @@
 <?php
 /**
- * Cart & Checkout Page
+ * Cart & Checkout Page — Smart Transaction
  * 
  * Displays all items in $_SESSION['cart'] with quantity controls.
  * Customer info auto-filled from logged-in session.
@@ -14,11 +14,12 @@ require_once __DIR__ . '/includes/session.php';
 require_once __DIR__ . '/includes/db.php';
 require_once __DIR__ . '/includes/customer_auth.php';
 require_once __DIR__ . '/includes/coupon_helper.php';
+require_once __DIR__ . '/includes/promotion_helper.php';
 
 startSession();
 requireCustomerLogin();
 
-$pageTitle = 'Cart - Smart Transaction System';
+$pageTitle = 'Cart — Smart Transaction';
 
 // Handle coupon removal via GET (fallback if JS fails)
 if (isset($_GET['remove_coupon'])) {
@@ -95,6 +96,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Calculate total and build order items
             $totalAmount = 0;
             $orderItems = [];
+            $promoSavingsCheckout = 0;
             foreach ($products as $product) {
                 $pid = (int) $product['id'];
                 $qty = (int) ($_SESSION['cart'][$pid] ?? 0);
@@ -102,6 +104,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $unitPrice = (float) $product['price'];
                 $subtotal = round($unitPrice * $qty, 2);
                 $totalAmount += $subtotal;
+
+                // Check for active promotion
+                $promo = getProductPromo($pdo, $pid);
+                $itemPromoSaving = 0;
+                if ($promo) {
+                    $discountedPrice = getDiscountedPrice($unitPrice, $promo['discount_percent']);
+                    $itemPromoSaving = round(($unitPrice - $discountedPrice) * $qty, 2);
+                    $promoSavingsCheckout += $itemPromoSaving;
+                }
+
                 $orderItems[] = [
                     'product_id'   => $pid,
                     'product_name' => $product['name'],
@@ -118,8 +130,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
 
-            // Apply coupon discount if available
-            $finalAmount = $totalAmount;
+            $subtotalAfterPromosCheckout = $totalAmount - $promoSavingsCheckout;
+
+            // Apply coupon discount if available (on subtotal after promos)
+            $finalAmount = $subtotalAfterPromosCheckout;
             $couponId = null;
             $couponCode = null;
             $discountAmount = 0;
@@ -127,11 +141,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if (isset($_SESSION['applied_coupon']) && $_SESSION['applied_coupon']['valid']) {
                 $applied = $_SESSION['applied_coupon'];
-                $finalAmount = $applied['final_total'];
+                // Recalculate coupon on subtotal after promos
+                $discountPercent = $applied['discount_percent'];
+                $discountAmount = round($subtotalAfterPromosCheckout * ($discountPercent / 100), 2);
+                $finalAmount = $subtotalAfterPromosCheckout - $discountAmount;
                 $couponId = $applied['coupon_id'];
                 $couponCode = $applied['coupon_code'];
-                $discountAmount = $applied['discount_amount'];
-                $discountPercent = $applied['discount_percent'];
             }
 
             // Begin transaction
@@ -186,6 +201,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['last_order'] = [
                 'order_id'        => $orderId,
                 'subtotal'        => $totalAmount,
+                'promo_savings'   => $promoSavingsCheckout,
+                'subtotal_after_promos' => $subtotalAfterPromosCheckout,
                 'discount_amount' => $discountAmount,
                 'discount_percent'=> $discountPercent,
                 'coupon_code'     => $couponCode,
@@ -216,33 +233,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 // Fetch current cart product details
 $cartItems = [];
 $cartTotal = 0;
+$promoSavings = 0;
 
 if (!empty($_SESSION['cart'])) {
     try {
         $pdo = getDBConnection();
         $productIds = array_keys($_SESSION['cart']);
         $placeholders = implode(',', array_fill(0, count($productIds), '?'));
-        $stmt = $pdo->prepare("SELECT id, name, price FROM products WHERE id IN ($placeholders)");
+        $stmt = $pdo->prepare("SELECT id, name, price, image_url FROM products WHERE id IN ($placeholders)");
         $stmt->execute($productIds);
         $products = $stmt->fetchAll();
 
         foreach ($products as $product) {
             $pid = (int) $product['id'];
             $qty = $_SESSION['cart'][$pid];
-            $subtotal = round((float) $product['price'] * $qty, 2);
+            $unitPrice = (float) $product['price'];
+            $subtotal = round($unitPrice * $qty, 2);
             $cartTotal += $subtotal;
+
+            // Check for active promotion
+            $promo = getProductPromo($pdo, $pid);
+            $itemPromoSaving = 0;
+            if ($promo) {
+                $discountedPrice = getDiscountedPrice($unitPrice, $promo['discount_percent']);
+                $itemPromoSaving = round(($unitPrice - $discountedPrice) * $qty, 2);
+                $promoSavings += $itemPromoSaving;
+            }
+
             $cartItems[] = [
-                'id'       => $pid,
-                'name'     => $product['name'],
-                'price'    => (float) $product['price'],
-                'quantity' => $qty,
-                'subtotal' => $subtotal,
+                'id'              => $pid,
+                'name'            => $product['name'],
+                'price'           => $unitPrice,
+                'quantity'        => $qty,
+                'subtotal'        => $subtotal,
+                'promo'           => $promo,
+                'promo_saving'    => $itemPromoSaving,
+                'discounted_price'=> isset($discountedPrice) ? $discountedPrice : $unitPrice,
+                'image_url'       => $product['image_url'] ?? '',
             ];
+            unset($discountedPrice);
         }
     } catch (PDOException $e) {
         $error = 'Unable to load cart details.';
     }
 }
+
+$subtotalAfterPromos = $cartTotal - $promoSavings;
 
 include __DIR__ . '/includes/header.php';
 ?>
@@ -274,6 +310,9 @@ include __DIR__ . '/includes/header.php';
                 <form method="POST" action="" id="cartForm">
                     <?php foreach ($cartItems as $item): ?>
                         <div class="cart-item" data-product-id="<?php echo $item['id']; ?>">
+                            <?php if ($item['image_url']): ?>
+                                <img src="/smart-transaction/uploads/<?php echo htmlspecialchars($item['image_url']); ?>" alt="<?php echo htmlspecialchars($item['name']); ?>" style="width: 48px; height: 48px; object-fit: cover; border-radius: 8px; margin-right: 0.75rem;">
+                            <?php endif; ?>
                             <div class="cart-item-info">
                                 <div class="cart-item-name"><?php echo htmlspecialchars($item['name']); ?></div>
                                 <div class="cart-item-unit-price">RM <?php echo number_format($item['price'], 2); ?> each</div>
@@ -349,16 +388,26 @@ include __DIR__ . '/includes/header.php';
                 <!-- Order Summary -->
                 <div class="cart-summary" id="orderSummary">
                     <div class="summary-row">
-                        <span>Subtotal (<?php echo count($cartItems); ?> items)</span>
+                        <span>Items Subtotal (<?php echo count($cartItems); ?> items)</span>
                         <span id="summarySubtotal">RM <?php echo number_format($cartTotal, 2); ?></span>
                     </div>
+                    <?php if ($promoSavings > 0): ?>
+                    <div class="summary-row" style="color: #16a34a;">
+                        <span>Promotion Savings</span>
+                        <span>- RM <?php echo number_format($promoSavings, 2); ?></span>
+                    </div>
+                    <div class="summary-row" style="border-top:1px dashed #e7e5e4;padding-top:0.5rem;">
+                        <span>Subtotal after Promotions</span>
+                        <span id="summaryAfterPromos">RM <?php echo number_format($subtotalAfterPromos, 2); ?></span>
+                    </div>
+                    <?php endif; ?>
                     <div class="summary-row" id="summaryDiscountRow" style="color: #16a34a; display: none;">
-                        <span>Discount (<span id="summaryDiscountPercent">0</span>%)</span>
+                        <span>Coupon Discount (<span id="summaryDiscountPercent">0</span>% off)</span>
                         <span>- RM <span id="summaryDiscountAmount">0.00</span></span>
                     </div>
                     <div class="summary-row total">
                         <span>Total</span>
-                        <span id="summaryTotal">RM <?php echo number_format($cartTotal, 2); ?></span>
+                        <span id="summaryTotal">RM <?php echo number_format($subtotalAfterPromos, 2); ?></span>
                     </div>
                 </div>
 
@@ -650,16 +699,6 @@ document.addEventListener('DOMContentLoaded', function() {
             };
             xhr.send();
         });
-    }
-
-    // ============================================================
-    // Check if coupon is already applied (from session)
-    // ============================================================
-    function checkAppliedCoupon() {
-        // If the page was loaded with an applied coupon (from session),
-        // we need to reflect that in the UI. This is handled by the
-        // initial page load — the coupon section will show the applied state.
-        // We reload coupons and check session state.
     }
 
     // ============================================================

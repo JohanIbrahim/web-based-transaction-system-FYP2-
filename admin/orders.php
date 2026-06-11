@@ -18,7 +18,7 @@ require_once __DIR__ . '/../includes/coupon_helper.php';
 startSession();
 requireAdminLogin();
 
-$pageTitle = 'Order Management - Admin';
+$pageTitle = 'Order Management — Smart Transaction';
 
 $pdo = getDBConnection();
 
