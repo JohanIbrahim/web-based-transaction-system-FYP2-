@@ -18,7 +18,14 @@ require_once __DIR__ . '/../includes/coupon_helper.php';
 startSession();
 requireAdminLogin();
 
+// Staff are allowed on this page — clear any "Access denied" flash from redirects
+if (isset($_SESSION['flash_message']) && stripos($_SESSION['flash_message'], 'Access denied') !== false) {
+    unset($_SESSION['flash_message'], $_SESSION['flash_type']);
+}
+
+
 $pageTitle = 'Order Management — Smart Transaction';
+
 
 $pdo = getDBConnection();
 
@@ -194,31 +201,39 @@ include __DIR__ . '/../includes/header.php';
 <?php else: ?>
     <div class="card">
         <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Order #</th>
-                        <th>Customer</th>
-                        <th>Items</th>
-                        <th>Total</th>
-                        <th>Payment</th>
-                        <th>Status</th>
-                        <th>Date</th>
-                        <th>Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($orders as $order): ?>
-                        <tr>
-                            <td><strong>#<?php echo (int) $order['id']; ?></strong></td>
-                            <td>
-                                <?php echo htmlspecialchars($order['customer_name']); ?>
-                                <?php if ($order['customer_phone']): ?>
-                                    <br><small class="text-muted"><?php echo htmlspecialchars($order['customer_phone']); ?></small>
-                                <?php endif; ?>
-                            </td>
-                            <td><?php echo (int) $order['item_count']; ?></td>
-                            <td><strong>RM <?php echo number_format((float) $order['total_amount'], 2); ?></strong></td>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Order #</th>
+                                <th>Customer</th>
+                                <th>Table</th>
+                                <th>Items</th>
+                                <th>Total</th>
+                                <th>Payment</th>
+                                <th>Status</th>
+                                <th>Date</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($orders as $order): ?>
+                                <tr>
+                                    <td><strong>#<?php echo (int) $order['id']; ?></strong></td>
+                                    <td>
+                                        <?php echo htmlspecialchars($order['customer_name']); ?>
+                                        <?php if ($order['customer_phone']): ?>
+                                            <br><small class="text-muted"><?php echo htmlspecialchars($order['customer_phone']); ?></small>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if (!empty($order['table_number'])): ?>
+                                            <span class="badge badge-active"><?php echo htmlspecialchars($order['table_number']); ?></span>
+                                        <?php else: ?>
+                                            <span class="text-muted">—</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><?php echo (int) $order['item_count']; ?></td>
+                                    <td><strong>RM <?php echo number_format((float) $order['total_amount'], 2); ?></strong></td>
                             <td>
                                 <?php if ($order['payment_status'] === 'paid'): ?>
                                     <span class="badge badge-paid">Paid</span>

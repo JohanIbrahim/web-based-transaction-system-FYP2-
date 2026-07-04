@@ -469,6 +469,11 @@ p { margin-bottom: var(--space-2); }
     color: #1e40af;
     border: 1px solid #93c5fd;
 }
+.badge-processing {
+    background: #fef3c7;
+    color: #92400e;
+    border: 1px solid #fcd34d;
+}
 .badge-ready {
     background: var(--color-accent-light);
     color: #166534;
@@ -497,6 +502,7 @@ p { margin-bottom: var(--space-2); }
 .badge-active {
     background: var(--color-accent-light);
     color: #166534;
+    border: 1px solid #86efac;
 }
 .badge-expired {
     background: var(--color-error-light);
@@ -809,14 +815,14 @@ tbody tr:hover {
     position: absolute;
     top: 0.5rem;
     left: 0.5rem;
-    padding: 0.2rem 0.6rem;
+    padding: 0.25rem 0.7rem;
     border-radius: var(--radius-sm);
-    font-size: 0.7rem;
+    font-size: 0.85rem;
     font-weight: 700;
     z-index: 2;
 }
 .product-badge.promo {
-    background: var(--color-primary);
+    background: var(--color-info);
     color: #fff;
 }
 .product-badge.new {
@@ -1368,6 +1374,354 @@ tbody tr:hover {
     border-bottom-color: var(--color-primary);
 }
 
+/* Tab panels */
+.tab-panel {
+    animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* History table */
+.history-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--color-surface-2);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-card);
+}
+.history-table thead {
+    background: var(--color-surface-offset);
+}
+.history-table th {
+    padding: var(--space-3) var(--space-4);
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-text-muted);
+    text-align: left;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--color-divider);
+}
+.history-table td {
+    padding: var(--space-3) var(--space-4);
+    font-size: 0.875rem;
+    color: var(--color-text);
+    border-bottom: 1px solid var(--color-divider);
+    vertical-align: middle;
+}
+.history-table tbody tr:last-child td {
+    border-bottom: none;
+}
+.history-table tbody tr:hover {
+    background: var(--color-surface);
+}
+.history-table tbody tr:nth-child(even) {
+    background: var(--color-surface);
+}
+.history-table tbody tr:nth-child(even):hover {
+    background: var(--color-surface-offset);
+}
+.history-table-id {
+    font-weight: 700;
+    color: var(--color-primary);
+}
+.history-table-date {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+.history-table-total {
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+}
+.table-responsive {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 768px) {
+    .history-table th,
+    .history-table td {
+        padding: var(--space-2) var(--space-3);
+        font-size: 0.8rem;
+    }
+}
+@media (max-width: 600px) {
+    .history-table th:nth-child(3),
+    .history-table td:nth-child(3),
+    .history-table th:nth-child(4),
+    .history-table td:nth-child(4) {
+        display: none;
+    }
+}
+
+/* Status flow text for Order Status tab */
+.status-flow-cell {
+    font-size: 0.8rem;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+.status-flow-past {
+    color: var(--color-text-muted);
+}
+.status-flow-current {
+    color: var(--color-primary);
+    font-weight: 700;
+}
+.status-flow-future {
+    color: var(--color-text-faint);
+}
+.status-flow-arrow {
+    color: var(--color-divider);
+    margin: 0 2px;
+    font-size: 0.75rem;
+}
+.status-table td {
+    vertical-align: middle;
+}
+@media (max-width: 768px) {
+    .status-flow-cell {
+        font-size: 0.75rem;
+        white-space: normal;
+    }
+}
+@media (max-width: 600px) {
+    .status-table th:nth-child(7),
+    .status-table td:nth-child(7) {
+        display: none;
+    }
+}
+
+/* ============================================================
+   TRACKING CARD — Grab-style dine-in order status
+   ============================================================ */
+.tracking-card {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5) var(--space-6);
+    margin-bottom: var(--space-5);
+    box-shadow: var(--shadow-card);
+    transition: box-shadow 0.2s ease;
+    max-width: 680px;
+}
+.tracking-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+/* Header row */
+.tracking-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    flex-wrap: wrap;
+}
+.tracking-card-header-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+.tracking-card-header-right {
+    flex-shrink: 0;
+}
+.tracking-order-label {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    font-weight: 500;
+}
+.tracking-time {
+    font-size: 0.78rem;
+    color: var(--color-text-faint);
+    white-space: nowrap;
+}
+
+/* Main status line */
+.tracking-status-line {
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border-left: 4px solid var(--color-primary);
+    line-height: 1.4;
+}
+
+/* Horizontal progress bar */
+.tracking-progress {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    width: 100%;
+    padding: var(--space-2) 0 var(--space-1);
+    margin-bottom: var(--space-3);
+}
+.tracking-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+    text-align: center;
+    min-width: 0;
+}
+.tracking-dot {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: var(--color-surface-offset);
+    border: 2px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 2;
+}
+.tracking-step.completed .tracking-dot {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+}
+.tracking-step.current .tracking-dot {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 4px rgba(200, 65, 10, 0.2);
+    animation: trackingPulse 2s infinite;
+}
+@keyframes trackingPulse {
+    0% { box-shadow: 0 0 0 4px rgba(200, 65, 10, 0.2); }
+    50% { box-shadow: 0 0 0 8px rgba(200, 65, 10, 0.1); }
+    100% { box-shadow: 0 0 0 4px rgba(200, 65, 10, 0.2); }
+}
+.tracking-label {
+    font-size: 0.65rem;
+    color: var(--color-text-faint);
+    margin-top: 6px;
+    white-space: nowrap;
+    font-weight: 500;
+    line-height: 1.2;
+}
+.tracking-step.completed .tracking-label {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+.tracking-step.current .tracking-label {
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+/* Connecting line between dots */
+.tracking-line {
+    flex: 0 1 24px;
+    height: 2px;
+    background: var(--color-divider);
+    align-self: center;
+    margin: 0 2px;
+    margin-bottom: 18px;
+    transition: background 0.3s ease;
+    min-width: 8px;
+}
+.tracking-line.completed {
+    background: var(--color-accent);
+}
+
+/* Bottom row — summary + action side by side */
+.tracking-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+
+/* Summary row */
+.tracking-summary {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-divider);
+    flex: 1;
+    flex-wrap: wrap;
+    min-width: 0;
+}
+.tracking-summary-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85rem;
+    color: var(--color-text);
+    font-weight: 500;
+}
+.tracking-summary-icon {
+    font-size: 0.9rem;
+    line-height: 1;
+}
+.tracking-summary-total {
+    font-weight: 700;
+    color: var(--color-primary);
+}
+.tracking-summary-divider {
+    width: 1px;
+    height: 16px;
+    background: var(--color-divider);
+    flex-shrink: 0;
+}
+
+/* Actions */
+.tracking-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+}
+
+/* Responsive */
+@media (max-width: 640px) {
+    .tracking-card {
+        padding: var(--space-4);
+        max-width: 100%;
+    }
+    .tracking-card-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .tracking-progress {
+        overflow-x: auto;
+        padding-bottom: var(--space-2);
+    }
+    .tracking-label {
+        font-size: 0.6rem;
+        white-space: normal;
+        max-width: 50px;
+    }
+    .tracking-dot {
+        width: 18px;
+        height: 18px;
+    }
+    .tracking-line {
+        flex: 0 1 12px;
+        min-width: 4px;
+    }
+    .tracking-summary {
+        gap: var(--space-2);
+        padding: var(--space-2) var(--space-3);
+    }
+    .tracking-summary-item {
+        font-size: 0.78rem;
+    }
+}
+
 /* Order Timeline */
 .order-timeline {
     position: relative;
@@ -1879,7 +2233,7 @@ tbody tr:hover {
 /* ============================================================
    ADMIN ORDER CARDS
    ============================================================ */
-.order-card {
+.admin-order-card {
     background: var(--color-surface-2);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-lg);
@@ -1888,8 +2242,8 @@ tbody tr:hover {
     box-shadow: var(--shadow-card);
     transition: box-shadow 0.2s;
 }
-.order-card:hover { box-shadow: var(--shadow-md); }
-.order-card-header {
+.admin-order-card:hover { box-shadow: var(--shadow-md); }
+.admin-order-card-header {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
@@ -1897,27 +2251,27 @@ tbody tr:hover {
     flex-wrap: wrap;
     gap: var(--space-2);
 }
-.order-card-id {
+.admin-order-card-id {
     font-weight: 700;
     font-size: 1rem;
 }
-.order-card-date {
+.admin-order-card-date {
     font-size: 0.8rem;
     color: var(--color-text-muted);
 }
-.order-card-customer {
+.admin-order-card-customer {
     font-size: 0.85rem;
     color: var(--color-text-muted);
     margin-bottom: var(--space-3);
 }
-.order-card-items { margin-bottom: var(--space-3); }
-.order-card-item {
+.admin-order-card-items { margin-bottom: var(--space-3); }
+.admin-order-card-item {
     display: flex;
     justify-content: space-between;
     font-size: 0.85rem;
     padding: 0.2rem 0;
 }
-.order-card-footer {
+.admin-order-card-footer {
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -1926,11 +2280,12 @@ tbody tr:hover {
     padding-top: var(--space-3);
     border-top: 1px solid var(--color-divider);
 }
-.order-card-total {
+.admin-order-card-total {
     font-weight: 700;
     font-size: 1.1rem;
     color: var(--color-primary);
 }
+
 
 /* ============================================================
    ADMIN PRODUCT CARDS
@@ -2073,14 +2428,394 @@ tbody tr:hover {
 }
 
 /* ============================================================
-   PRINT STYLES
+   ORDERS SECTION — Section headers
    ============================================================ */
-@media print {
-    .navbar, .admin-sidebar, .admin-topbar, .sidebar-toggle,
-    .dashboard-filter, .btn, .filter-pills, .filter-custom,
-    .theme-toggle, .footer { display: none !important; }
-    .admin-main { margin-left: 0; }
-    .kpi-card, .chart-card, .card { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
-    .chart-container canvas { max-height: 200px; }
-    .receipt { box-shadow: none; border: 1px solid #ddd; }
+.orders-section {
+    margin-bottom: var(--space-6);
 }
+.orders-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-4);
+}
+.orders-section-header h2 {
+    font-family: var(--font-display);
+    font-size: 1.35rem;
+    margin-bottom: 0;
+}
+
+/* ============================================================
+   CURRENT ORDERS — GRAB-STYLE DINE-IN TRACKING CARD
+   ============================================================ */
+
+/* Main card container — Grab-style order card */
+
+.order-card {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-5);
+    margin-bottom: var(--space-4);
+    box-shadow: var(--shadow-card);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    transition: box-shadow 0.2s ease;
+    max-width: 100%;
+}
+.order-card:hover {
+    box-shadow: var(--shadow-md);
+}
+
+/* Header row — order info left, status chip right */
+.order-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: var(--space-3);
+    flex-wrap: wrap;
+}
+.order-card-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.order-card-number {
+    font-weight: 700;
+    font-size: 1rem;
+    color: var(--color-text);
+}
+.order-card-datetime {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+.order-card-table {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.order-card-header-right {
+    flex-shrink: 0;
+}
+
+/* Status chip */
+.order-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0.3rem 0.85rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    border-radius: var(--radius-full);
+    white-space: nowrap;
+    border: 1px solid transparent;
+}
+.order-status-chip.pending {
+    background: var(--color-warning-light);
+    color: #92600a;
+    border-color: #f0c060;
+}
+.order-status-chip.processing {
+    background: #fef3c7;
+    color: #92400e;
+    border-color: #fcd34d;
+}
+.order-status-chip.preparing {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #93c5fd;
+}
+.order-status-chip.ready {
+    background: var(--color-accent-light);
+    color: #166534;
+    border-color: #86efac;
+}
+.order-status-chip.active {
+    background: var(--color-accent-light);
+    color: #166534;
+    border-color: #86efac;
+}
+.order-status-chip.completed {
+    background: #f3f4f6;
+    color: #374151;
+    border-color: #d1d5db;
+}
+.order-status-chip.cancelled {
+    background: var(--color-error-light);
+    color: #991b1b;
+    border-color: #fca5a5;
+}
+.order-status-chip .chip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.7;
+}
+.order-status-chip.pending .chip-dot {
+    animation: chipPulse 1.5s infinite;
+}
+@keyframes chipPulse {
+    0%, 100% { opacity: 0.7; }
+    50% { opacity: 0.3; }
+}
+
+/* Status message — friendly dine-in text */
+.order-status-msg {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border-left: 4px solid var(--color-primary);
+    line-height: 1.4;
+}
+
+/* ============================================================
+   PROGRESS TRACKER — Simple dots + line (dine-in)
+   ============================================================ */
+.order-progress {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    width: 100%;
+    padding: var(--space-3) 0 var(--space-1);
+    position: relative;
+}
+.order-progress-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    position: relative;
+    text-align: center;
+}
+.order-progress-dot {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--color-surface-offset);
+    border: 2px solid var(--color-border);
+    position: relative;
+    z-index: 2;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+}
+.order-progress-step.completed .order-progress-dot {
+    background: var(--color-accent);
+    border-color: var(--color-accent);
+}
+.order-progress-step.current .order-progress-dot {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(200, 65, 10, 0.2);
+}
+.order-progress-label {
+    font-size: 0.7rem;
+    color: var(--color-text-faint);
+    margin-top: 8px;
+    white-space: nowrap;
+    font-weight: 500;
+    line-height: 1.2;
+}
+.order-progress-step.completed .order-progress-label {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+.order-progress-step.current .order-progress-label {
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+/* Horizontal line connecting dots */
+.order-progress-line {
+    position: absolute;
+    top: 7px;
+    left: calc(50% + 10px);
+    right: calc(-50% + 10px);
+    height: 2px;
+    background: var(--color-divider);
+    z-index: 1;
+}
+.order-progress-line.completed {
+    background: var(--color-accent);
+}
+
+
+/* ============================================================
+   SUMMARY ROW — Table, Items, Total, Payment
+   ============================================================ */
+.order-summary {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4);
+    background: var(--color-surface);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-divider);
+}
+.order-summary-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    text-align: center;
+}
+.order-summary-label {
+    font-size: 0.7rem;
+    color: var(--color-text-faint);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 500;
+}
+.order-summary-value {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--color-text);
+}
+.order-summary-total {
+    color: var(--color-primary);
+    font-size: 1rem;
+}
+@media (max-width: 640px) {
+    .order-summary {
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-3);
+    }
+}
+
+
+/* ============================================================
+   ACTION ROW — View Details button
+   ============================================================ */
+.order-actions {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+    gap: var(--space-3);
+    padding-top: 0;
+}
+.order-actions .btn {
+    min-height: 38px;
+}
+
+/* ============================================================
+   ORDER HISTORY — Compact card layout
+   ============================================================ */
+.history-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+.history-card {
+    background: var(--color-surface-2);
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-4) var(--space-5);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: var(--space-4);
+    flex-wrap: wrap;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s ease;
+}
+.history-card:hover {
+    box-shadow: var(--shadow-card);
+}
+.history-card-left {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 160px;
+}
+.history-order-number {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--color-text);
+}
+.history-order-date {
+    font-size: 0.8rem;
+    color: var(--color-text-muted);
+}
+.history-order-meta {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: 0.85rem;
+    color: var(--color-text-muted);
+    flex-wrap: wrap;
+}
+.history-divider {
+    color: var(--color-divider);
+    font-size: 0.8rem;
+}
+.history-total {
+    font-weight: 700;
+    color: var(--color-primary);
+}
+.history-card-right {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    flex-shrink: 0;
+    flex-wrap: wrap;
+}
+
+/* ============================================================
+   RESPONSIVE — Order cards
+   ============================================================ */
+@media (max-width: 768px) {
+    .order-progress-label {
+        font-size: 0.6rem;
+        white-space: normal;
+        max-width: 60px;
+    }
+    .order-progress-dot {
+        width: 12px;
+        height: 12px;
+    }
+    .order-progress-line {
+        top: 6px;
+        left: calc(50% + 8px);
+        right: calc(-50% + 8px);
+    }
+    .history-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .history-card-right {
+        width: 100%;
+        justify-content: flex-start;
+    }
+}
+@media (max-width: 480px) {
+    .order-card {
+        padding: var(--space-4);
+    }
+    .order-card-header {
+        flex-direction: column;
+    }
+    .order-card-header-right {
+        align-self: flex-start;
+    }
+    .order-summary {
+        grid-template-columns: repeat(2, 1fr);
+        gap: var(--space-2);
+    }
+    .order-summary-item {
+        text-align: left;
+    }
+    .order-actions {
+        justify-content: stretch;
+    }
+    .order-actions .btn {
+        flex: 1;
+    }
+}
+
+

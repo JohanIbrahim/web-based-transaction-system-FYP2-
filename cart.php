@@ -152,17 +152,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Begin transaction
             $pdo->beginTransaction();
 
+            // Validate table number
+            $tableNumber = trim($_POST['table_number'] ?? '');
+            if (empty($tableNumber)) {
+                $_SESSION['flash_message'] = 'Please enter your table number.';
+                $_SESSION['flash_type'] = 'warning';
+                header('Location: /smart-transaction/cart.php');
+                exit;
+            }
+
             // Insert order (with coupon_id if applicable)
             $orderStmt = $pdo->prepare("
                 INSERT INTO orders 
-                (customer_id, customer_name, customer_phone, total_amount, coupon_id, status, payment_status, created_at, updated_at) 
+                (customer_id, customer_name, customer_phone, table_number, total_amount, coupon_id, status, payment_status, created_at, updated_at) 
                 VALUES 
-                (:customer_id, :customer_name, :customer_phone, :total_amount, :coupon_id, 'pending', 'unpaid', NOW(), NOW())
+                (:customer_id, :customer_name, :customer_phone, :table_number, :total_amount, :coupon_id, 'pending', 'unpaid', NOW(), NOW())
             ");
             $orderStmt->execute([
                 ':customer_id'    => $_SESSION['customer_id'] ?? null,
                 ':customer_name'  => $_SESSION['customer_name'] ?? '',
                 ':customer_phone' => $_SESSION['customer_phone'] ?? '',
+                ':table_number'   => $tableNumber,
                 ':total_amount'   => $finalAmount,
                 ':coupon_id'      => $couponId,
             ]);
@@ -421,6 +431,15 @@ include __DIR__ . '/includes/header.php';
                                 <br><small class="text-muted"><?php echo htmlspecialchars($_SESSION['customer_phone']); ?></small>
                             <?php endif; ?>
                         </p>
+                    </div>
+
+                    <!-- Table Number -->
+                    <div class="form-group">
+                        <label class="form-label" for="table_number">Table Number <span class="required">*</span></label>
+                        <input type="text" id="table_number" name="table_number" class="form-input" 
+                               placeholder="e.g. 5, A3, 12" required
+                               value="<?php echo htmlspecialchars($_POST['table_number'] ?? ''); ?>">
+                        <small class="text-muted" style="font-size: 0.75rem;">Enter your table number so we can serve you.</small>
                     </div>
 
                     <button type="submit" name="checkout" value="1" class="btn btn-primary btn-block btn-lg">

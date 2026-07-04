@@ -167,6 +167,9 @@ include __DIR__ . '/includes/header.php';
                 <?php if ($order['customer_phone']): ?>
                     <p><strong>Phone:</strong> <?php echo htmlspecialchars($order['customer_phone']); ?></p>
                 <?php endif; ?>
+                <?php if (!empty($order['table_number'])): ?>
+                    <p><strong>Table:</strong> <?php echo htmlspecialchars($order['table_number']); ?></p>
+                <?php endif; ?>
             </div>
 
             <hr style="border: none; border-top: 1px dashed var(--neutral-300);">

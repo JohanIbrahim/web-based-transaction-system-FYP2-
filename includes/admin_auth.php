@@ -62,7 +62,8 @@ function requireAdminLogin(): void
 
 /**
  * Require admin-only access to a page.
- * Redirects staff users away with a flash message.
+ * Redirects staff users away without a misleading flash message,
+ * since staff are legitimately allowed on the orders page.
  *
  * @return void
  */
@@ -71,12 +72,11 @@ function requireAdminRole(): void
     requireAdminLogin();
 
     if (!isAdmin()) {
-        $_SESSION['flash_message'] = 'Access denied. You do not have permission to view this page.';
-        $_SESSION['flash_type'] = 'danger';
         header('Location: /smart-transaction/admin/orders.php');
         exit();
     }
 }
+
 
 /**
  * Check if any user (admin, staff, or customer) is logged in

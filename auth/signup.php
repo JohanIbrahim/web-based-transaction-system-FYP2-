@@ -31,6 +31,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $phone    = trim($_POST['phone'] ?? '');
     $password = $_POST['password'] ?? '';
     $confirm  = $_POST['confirm_password'] ?? '';
+    $securityQuestion = trim($_POST['security_question'] ?? '');
+    $securityAnswer   = trim($_POST['security_answer'] ?? '');
 
     // Validation
     if (empty($name) || empty($email) || empty($password)) {
@@ -41,24 +43,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Password must be at least 6 characters.';
     } elseif ($password !== $confirm) {
         $error = 'Passwords do not match.';
+    } elseif (empty($securityQuestion)) {
+        $error = 'Please select a security question.';
+    } elseif (empty($securityAnswer)) {
+        $error = 'Please enter your security answer.';
     } else {
         try {
             $pdo = getDBConnection();
 
             // Check if email already exists
-            $check = $pdo->prepare('SELECT id FROM customers WHERE email = :email LIMIT 1');
+            $check = $pdo->prepare('SELECT id FROM users WHERE email = :email LIMIT 1');
             $check->execute([':email' => $email]);
             if ($check->fetch()) {
                 $error = 'An account with this email already exists.';
             } else {
                 // Insert new customer
                 $hashed = password_hash($password, PASSWORD_DEFAULT);
-                $stmt = $pdo->prepare('INSERT INTO customers (name, email, phone, password, created_at) VALUES (:name, :email, :phone, :password, NOW())');
+                $hashedAnswer = password_hash(strtolower($securityAnswer), PASSWORD_DEFAULT);
+                $stmt = $pdo->prepare('INSERT INTO users (name, email, phone, password_hash, security_question, security_answer, role, created_at) VALUES (:name, :email, :phone, :password, :security_question, :security_answer, \'customer\', NOW())');
                 $stmt->execute([
-                    ':name'     => $name,
-                    ':email'    => $email,
-                    ':phone'    => $phone,
-                    ':password' => $hashed,
+                    ':name'              => $name,
+                    ':email'             => $email,
+                    ':phone'             => $phone,
+                    ':password'          => $hashed,
+                    ':security_question' => $securityQuestion,
+                    ':security_answer'   => $hashedAnswer,
                 ]);
 
                 $success = 'Account created successfully! You can now log in.';
@@ -188,6 +197,26 @@ $pageTitle = 'Sign Up — Smart Transaction';
                     <label class="form-label" for="confirm_password">Confirm Password <span class="required">*</span></label>
                     <input type="password" id="confirm_password" name="confirm_password" class="form-input" 
                            placeholder="Repeat your password" required>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="security_question">Security Question <span class="required">*</span></label>
+                    <select id="security_question" name="security_question" class="form-input" required>
+                        <option value="">-- Select a security question --</option>
+                        <option value="What is your mother's maiden name?" <?php echo (($_POST['security_question'] ?? '') === "What is your mother's maiden name?") ? 'selected' : ''; ?>>What is your mother's maiden name?</option>
+                        <option value="What was the name of your first school?" <?php echo (($_POST['security_question'] ?? '') === "What was the name of your first school?") ? 'selected' : ''; ?>>What was the name of your first school?</option>
+                        <option value="What is your favourite food?" <?php echo (($_POST['security_question'] ?? '') === "What is your favourite food?") ? 'selected' : ''; ?>>What is your favourite food?</option>
+                        <option value="What city were you born in?" <?php echo (($_POST['security_question'] ?? '') === "What city were you born in?") ? 'selected' : ''; ?>>What city were you born in?</option>
+                        <option value="What is your pet's name?" <?php echo (($_POST['security_question'] ?? '') === "What is your pet's name?") ? 'selected' : ''; ?>>What is your pet's name?</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label class="form-label" for="security_answer">Security Answer <span class="required">*</span></label>
+                    <input type="text" id="security_answer" name="security_answer" class="form-input" 
+                           placeholder="Enter your answer" required
+                           value="<?php echo htmlspecialchars($_POST['security_answer'] ?? ''); ?>">
+                    <small style="color: var(--color-text-muted);">Answer is case-insensitive and will be stored securely.</small>
                 </div>
 
                 <button type="submit" class="btn btn-primary btn-block btn-lg">

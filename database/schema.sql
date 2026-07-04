@@ -1,6 +1,6 @@
 -- ============================================================
 -- Smart Web-Based Transaction System - Database Schema
--- Phase 1: Foundation
+-- Complete schema with all 11 tables
 -- ============================================================
 
 CREATE DATABASE IF NOT EXISTS smart_transaction_db
@@ -18,6 +18,8 @@ CREATE TABLE users (
     email VARCHAR(100) NOT NULL UNIQUE,
     phone VARCHAR(20) DEFAULT NULL,
     password_hash VARCHAR(255) NOT NULL,
+    security_question VARCHAR(255) DEFAULT NULL,
+    security_answer VARCHAR(255) DEFAULT NULL,
     reset_token VARCHAR(64) DEFAULT NULL,
     reset_token_expires DATETIME DEFAULT NULL,
     role ENUM('customer','staff','admin') NOT NULL DEFAULT 'customer',
@@ -57,8 +59,10 @@ CREATE TABLE orders (
     customer_id INT DEFAULT NULL,
     customer_name VARCHAR(100) NOT NULL,
     customer_phone VARCHAR(20) DEFAULT NULL,
+    table_number VARCHAR(10) DEFAULT NULL,
     total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
-    status ENUM('pending','preparing','ready','completed','cancelled') NOT NULL DEFAULT 'pending',
+    coupon_id INT DEFAULT NULL,
+    status ENUM('pending','processing','preparing','ready','completed','cancelled','active') NOT NULL DEFAULT 'pending',
     payment_status ENUM('unpaid','paid') NOT NULL DEFAULT 'unpaid',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -120,6 +124,56 @@ CREATE TABLE order_status_logs (
     changed_by VARCHAR(100) DEFAULT NULL,
     changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- 9. Promotions Table
+-- ------------------------------------------------------------
+CREATE TABLE promotions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(200) NOT NULL,
+    description TEXT DEFAULT NULL,
+    promotion_type ENUM('day','week') NOT NULL DEFAULT 'day',
+    discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    created_by INT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- 10. Promotion Products Table (many-to-many)
+-- ------------------------------------------------------------
+CREATE TABLE promotion_products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    promotion_id INT NOT NULL,
+    product_id INT NOT NULL,
+    FOREIGN KEY (promotion_id) REFERENCES promotions(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_promo_product (promotion_id, product_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- ------------------------------------------------------------
+-- 11. Coupons Table
+-- ------------------------------------------------------------
+CREATE TABLE coupons (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    customer_id INT NOT NULL,
+    coupon_code VARCHAR(50) NOT NULL UNIQUE,
+    discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
+    tier INT NOT NULL DEFAULT 6,
+    tier_name VARCHAR(100) DEFAULT 'Custom',
+    is_used TINYINT(1) NOT NULL DEFAULT 0,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    used_in_order_id INT DEFAULT NULL,
+    issued_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    used_at TIMESTAMP NULL DEFAULT NULL,
+    expires_at DATETIME NOT NULL,
+    FOREIGN KEY (customer_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (used_in_order_id) REFERENCES orders(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ============================================================

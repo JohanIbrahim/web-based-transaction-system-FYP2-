@@ -65,7 +65,6 @@
                     <li class="nav-item"><a href="/smart-transaction/admin/transactions.php" class="nav-link">Transactions</a></li>
                     <li class="nav-item"><a href="/smart-transaction/admin/reports.php" class="nav-link">Reports</a></li>
                 <?php endif; ?>
-                <li class="nav-item"><a href="/smart-transaction/admin/orders.php" class="nav-link">Orders</a></li>
                 <?php if (isset($_SESSION['admin_role']) && $_SESSION['admin_role'] === 'admin'): ?>
                     <li class="nav-item"><a href="/smart-transaction/admin/manage-accounts.php" class="nav-link">Manage Accounts</a></li>
                     <li class="nav-item"><a href="/smart-transaction/admin/settings.php" class="nav-link">Settings</a></li>
