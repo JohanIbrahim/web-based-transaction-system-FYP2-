@@ -192,16 +192,6 @@ $pageTitle = 'Login — Smart Transaction';
                 Don't have an account? <a href="/smart-transaction/auth/signup.php">Sign Up</a>
             </p>
 
-            <!-- Demo Credentials -->
-            <div class="demo-credentials">
-                <p class="demo-credentials-title">Demo Login Credentials</p>
-                <div class="demo-credentials-grid">
-                    <div><strong>Admin</strong> : admin@smarttransaction.com</div>
-                    <div><strong>Staff</strong> : staff@smarttransaction.com</div>
-                    <div><strong>Customer</strong> : customer@smarttransaction.com</div>
-                    <div><strong>Password</strong> : password</div>
-                </div>
-            </div>
         </div>
     </div>
 </div>
